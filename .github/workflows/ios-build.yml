@@ -1,0 +1,128 @@
+name: iPadOS build
+
+# Phase 1A: build the minimal CemuIOS app shell as an unsigned arm64 .ipa.
+# Runs only when iPadOS files change, so upstream Cemu changes don't trigger it.
+on:
+  push:
+    paths:
+      - "app/**"
+      - "src/ios/**"
+      - ".github/workflows/ios-build.yml"
+  pull_request:
+    paths:
+      - "app/**"
+      - "src/ios/**"
+      - ".github/workflows/ios-build.yml"
+  workflow_dispatch:
+    inputs:
+      try_xcode27:
+        description: "Also build on the Xcode 27 preview runner (may queue or be unstable)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  matrix:
+    name: Choose runners
+    runs-on: ubuntu-latest
+    outputs:
+      include: ${{ steps.pick.outputs.include }}
+    steps:
+      - id: pick
+        env:
+          TRY_XCODE27: ${{ github.event_name == 'workflow_dispatch' && inputs.try_xcode27 }}
+        run: |
+          # macos-26: stable, generally available Apple Silicon runner (free for public repos).
+          # xcode-27: Xcode 27 / iOS 27 SDK preview image. Opt-in only: preview runners can queue for a long time.
+          stable='{"label":"macos-26","runner":"macos-26","experimental":false}'
+          preview='{"label":"xcode-27","runner":"xcode-27","experimental":true}'
+          if [ "$TRY_XCODE27" = "true" ]; then list="[$stable,$preview]"; else list="[$stable]"; fi
+          echo "include=$list" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build (${{ matrix.label }})
+    needs: matrix
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.matrix.outputs.include) }}
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.experimental }}
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: false   # Cemu's submodules are not needed until the core is introduced
+
+      - name: Select Xcode (runner default) and print environment
+        run: |
+          set -euo pipefail
+          echo "== Installed Xcodes ==";       ls -d /Applications/Xcode*.app || true
+          echo "== Selected ==";               xcode-select -p
+          echo "== macOS ==";                  sw_vers
+          echo "== Architecture ==";           uname -m
+          echo "== Xcode ==";                  xcodebuild -version
+          echo "== iPhoneOS SDK ==";           xcrun --sdk iphoneos --show-sdk-version
+          echo "                   ";          xcrun --sdk iphoneos --show-sdk-path
+          echo "== All SDKs ==";               xcodebuild -showsdks
+          echo "== Swift ==";                  xcrun swift --version
+          echo "== clang ==";                  xcrun clang --version
+
+      - name: Generate Xcode project (XcodeGen)
+        working-directory: app/CemuIOS
+        run: |
+          set -euo pipefail
+          command -v xcodegen >/dev/null || brew install xcodegen
+          xcodegen --version
+          xcodegen generate
+
+      - name: Build unsigned app (Release, iphoneos, arm64)
+        working-directory: app/CemuIOS
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project CemuIOS.xcodeproj \
+            -scheme CemuIOS \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" \
+            ARCHS=arm64 \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            build | tee "$RUNNER_TEMP/xcodebuild.log"
+
+      - name: Package unsigned .ipa and verify
+        run: |
+          set -euo pipefail
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/CemuIOS.app"
+          test -d "$APP"
+          echo "== Binary =="; file "$APP/CemuIOS"; lipo -info "$APP/CemuIOS"
+          echo "== Load commands (min OS / SDK) =="; otool -l "$APP/CemuIOS" | grep -A4 LC_BUILD_VERSION
+          echo "== Info.plist =="; plutil -p "$APP/Info.plist"
+          echo "== Signature (expected: none) =="; codesign -dv "$APP" 2>&1 || true
+
+          OUT="$GITHUB_WORKSPACE/out"
+          mkdir -p "$OUT/Payload"
+          cp -R "$APP" "$OUT/Payload/"
+          (cd "$OUT" && zip -qry "CemuIOS-unsigned-${{ matrix.label }}.ipa" Payload)
+          ls -l "$OUT"/*.ipa
+
+      - name: Upload .ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: CemuIOS-unsigned-${{ matrix.label }}-${{ github.sha }}
+          path: out/*.ipa
+          if-no-files-found: error
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: xcodebuild-log-${{ matrix.label }}-${{ github.sha }}
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
