@@ -167,6 +167,7 @@ jobs:
 
       - name: "Diagnostics: list pre-main initializers in the WiiPad binary"
         if: steps.app.outcome == 'success'
+        continue-on-error: true
         run: bash .github/scripts/list_initializers.sh "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/WiiPad.app/WiiPad" "$LOG_DIR/WiiPad-LinkMap.txt" "$LOG_DIR/initializers.txt"
 
       - name: Package unsigned .ipa and verify

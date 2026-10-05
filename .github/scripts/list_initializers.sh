@@ -88,4 +88,5 @@ EOF
 } >> "$OUT"
 objc=$(sed -n '/== Objective-C/,$p' "$OUT" | tr '\n' ' ' | cut -c1-3500)
 echo "::notice title=Startup ObjC metadata::$objc"
-cat "$OUT" | head -120
+head -120 "$OUT" || true
+exit 0 # diagnostics must never fail the build
