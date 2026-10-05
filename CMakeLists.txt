@@ -61,6 +61,9 @@ project(Cemu VERSION 2.0.0)
 # from src/ios instead of the desktop executable. See docs/ipados/.
 if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
 	set(CEMU_IOS ON)
+	# CMake makes every iOS executable an app bundle by default, which breaks install() rules of
+	# helper tools in dependencies (e.g. zarchiveTool). The WiiPad app bundle is built by Xcode instead.
+	set(CMAKE_MACOSX_BUNDLE OFF)
 else()
 	set(CEMU_IOS OFF)
 endif()
