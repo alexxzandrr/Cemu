@@ -117,3 +117,12 @@ Mach-O assembly). Same interface and semantics as `FiberUnix.cpp` (2 MB stack pe
 fiber, `GetFiberPrivateData`). `src/util/CMakeLists.txt` skips `FiberUnix.cpp` when `CEMU_IOS`; desktop unchanged.
 The diagnostics add a self-test of Cemu's `Fiber` on the monitor thread
 (`diag: fiber self-test (Cemu Fiber, Boost.Context): ... OK`).
+
+### Follow-up: SIGSEGV in `FiberTrampoline` (60f82ea)
+
+The game started running, then crashed at the first PPC thread fiber: fault address `0x0e76c000_16c9c688`. Under
+`__arm64__`, coreinit declares `__OSFiberThreadEntry(uint32 high, uint32 low)` and rebuilds its `OSHostThread*` from the
+two halves, matching `FiberUnix.cpp`, which passes the parameter to `makecontext()` split in two. The first
+`FiberIOS.cpp` passed the pointer whole, so the entry rebuilt `(low32 << 32) | garbage`. The trampoline now uses the
+same split convention on arm64 (no coreinit change). The scheduler idle-loop fiber ignores its parameter, which is why
+it ran. The self-test now passes a real pointer and checks it arrives intact.

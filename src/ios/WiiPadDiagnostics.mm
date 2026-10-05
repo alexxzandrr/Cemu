@@ -299,9 +299,12 @@ namespace
 	// fiber and back on the monitor thread. The test fiber is left suspended (it is never resumed again).
 	Fiber* s_monitorFiber = nullptr;
 	std::atomic_int s_cemuFiberSteps{ 0 };
+	std::atomic<uint64_t> s_cemuFiberParam{ 0 };
 
-	void CemuFiberEntry(void*)
+	// declared like coreinit's __OSFiberThreadEntry on arm64: the parameter arrives as two 32-bit halves
+	void CemuFiberEntry(uint32 high, uint32 low)
 	{
+		s_cemuFiberParam = ((uint64_t)high << 32) | low;
 		s_cemuFiberSteps = 1;
 		Fiber::Switch(*s_monitorFiber);
 	}
@@ -309,10 +312,13 @@ namespace
 	void CemuFiberSelfTest()
 	{
 		s_monitorFiber = Fiber::PrepareCurrentThread();
-		Fiber* testFiber = new Fiber(&CemuFiberEntry, nullptr, nullptr);
+		void* const param = (void*)&s_cemuFiberSteps; // a real 64-bit host pointer, like OSHostThread*
+		Fiber* testFiber = new Fiber((void (*)(void*))&CemuFiberEntry, param, nullptr);
 		Fiber::Switch(*testFiber);
-		const bool ok = s_cemuFiberSteps.load() == 1;
-		WiiPadLog::Write(fmt::format("diag: fiber self-test (Cemu Fiber, Boost.Context): switch into a new fiber and back: {}", ok ? "OK" : "FAILED"));
+		const bool switched = s_cemuFiberSteps.load() == 1;
+		const bool paramOk = s_cemuFiberParam.load() == (uint64_t)param;
+		WiiPadLog::Write(fmt::format("diag: fiber self-test (Cemu Fiber, Boost.Context): switch into a new fiber and back: {}; entry parameter {:#x} (expected {:#x}): {}",
+			switched ? "OK" : "FAILED", s_cemuFiberParam.load(), (uint64_t)param, paramOk ? "OK" : "FAILED"));
 	}
 
 	// ---------------- monitor ----------------

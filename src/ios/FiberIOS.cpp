@@ -35,7 +35,15 @@ namespace
 	{
 		static_cast<FiberContext*>(transfer.data)->context = transfer.fctx;
 		FiberContext* self = sCurrentContext;
+#ifdef __arm64__
+		// Same calling convention as FiberUnix.cpp on arm64, which passes the parameter to makecontext() split into two
+		// 32-bit halves (makecontext arguments are ints). Entry points depend on it: coreinit's __OSFiberThreadEntry is
+		// declared as (uint32 high, uint32 low) under __arm64__ and rebuilds the pointer from the halves.
+		const uint64 param = (uint64)self->userParam;
+		reinterpret_cast<void (*)(uint32, uint32)>(self->entryPoint)((uint32)(param >> 32), (uint32)param);
+#else
 		self->entryPoint(self->userParam);
+#endif
 		abort(); // Cemu's fiber entry points never return; they switch away
 	}
 }
