@@ -42,9 +42,64 @@ Other dependencies checked:
 | File | Change |
 | --- | --- |
 | `src/Cafe/CafeSystem.cpp` | optional launch-stage callback (null on desktop, additions only); loader logic unchanged |
+| `src/Cafe/HW/Latte/Renderer/Metal/MetalRenderer.h` | `SetShouldMaximizeConcurrentCompilation` is a no-op on iOS (the selector is macOS-only); desktop unchanged |
 | `src/ios/CemuBridge.h/.mm` | `launchTitleAtURL:error:` (mirrors `FileLoad`), `savedTitleURL`, `titleLaunched`, `SystemImplementation`, progress monitor, no in-app shutdown while a title runs |
-| `src/ios/WiiPadLog.h/.mm` | fatal handler prints the last boot stage |
+| `src/ios/WiiPadLog.h/.mm` | fatal handler prints the last boot stage and a backtrace; `std::terminate` handler logs the exception (C++ or Objective-C) and chains to the runtime's handler; crashed sessions' logs kept as `*.crash.*` |
 | `app/WiiPad/Sources/ContentView.swift` | Files pickers (folder / file), reopen last title, status and errors |
+
+## Result (verified on device, commit `3a01f15`)
+
+M3 iPad Air, iPadOS 27 beta, unsigned IPA from CI run 37265857978, sideloaded. Title: Splatoon
+(`0005000010176900`, v16, extracted folder, user's own dump).
+
+Verified boot path, in order, from `WiiPad.log`:
+
+1. Files picker → security-scoped access → POSIX path → `TitleInfo` → `CafeTitleList` → `PrepareForegroundTitle` (mounted)
+2. `RPX/RPL loading` (coreinit + `Gambit.rpx`) → `RPL linking`
+3. `GPU thread start` → `GPU initialization completed` (Metal renderer, shader cache, registers)
+4. `game initialization completed (coreinit entrypoint returned)`
+5. `PPC scheduler started: game code now runs on the single-core interpreter` (fibers via `FiberUnix.cpp` work)
+6. The game renders to the Metal surface on the iPad.
+
+### Blocker fixed on the way
+
+The first attempt aborted on the GPU thread at "GPU initialization (shader cache, registers)":
+`RendererShaderMtl::ShaderCacheLoading_begin` → `MetalRenderer::SetShouldMaximizeConcurrentCompilation` →
+`-[MTLDevice setShouldMaximizeConcurrentCompilation:]`, which exists only on macOS 13.3+. On iPadOS it raises
+`NSInvalidArgumentException` (unrecognized selector); uncaught on the GPU thread → `std::terminate` → SIGABRT.
+Fix: the call is compiled out under `BOOST_OS_IOS`. Effect on iPadOS: Metal does not receive the "maximize
+concurrent shader compilation" hint. Nothing else changes.
+
+### Runtime-behaviour audit of the Phase 2A diagnostics
+
+Checked before the checkpoint: none of the diagnostics changes what Cemu or the game does.
+
+| Diagnostic | Effect on normal runtime |
+| --- | --- |
+| `g_cemuTitleLaunchStageCallback` (CafeSystem) | observer only; null on desktop; on iPadOS writes one log line per stage (6 calls per boot) |
+| Progress monitor thread (`WiiPadMonitor`) | read-only polling of `g_isGPUInitFinished`, `LatteGPUState.gx2InitCalled`, `flipCounter` every 250 ms; at most one line per 60 frames; exits after 5 minutes |
+| Fatal signal handlers | run only on a fatal signal; write, then chain to the previous handler (Cemu's `ExceptionHandler`, or the default action) |
+| `std::terminate` handler | runs only when the process is already terminating; logs, then chains to the previous (Objective-C runtime) handler, then `abort()` |
+| `NSSetUncaughtExceptionHandler` | logging only; nothing else in the app installs one |
+| Crash-log preservation | file renames at app start, before Cemu initializes |
+| stdout/stderr → `stdout.txt` | redirects console output only |
+| Pre-launch `.rpx` check | read-only `fsc` directory listing; turns Cemu's post-launch `cemu_assert` trap into a reportable error |
+| 4 GB address-space probe (Phase 1B) | `mmap(PROT_NONE)` + immediate `munmap`; Cemu's own reservation is unchanged |
+
+No temporary investigation code remains (the Phase 1B initializer diagnostics were removed in `20f14a4`).
+
+## Known limitations
+
+- **No audio.** `snd_core::AXOut_init` → `IAudioAPI::CreateDeviceFromConfig` fails because Cubeb (and every other
+  audio backend) is intentionally disabled in the iPadOS build (`ENABLE_CUBEB=OFF`). Cemu catches the error and logs
+  `can't initialize tv audio: …` to `log.txt` (GamePad audio likewise); the title keeps running silently. An iOS audio
+  backend is a later phase.
+- **No input.** No controller, touch or GamePad input is wired up yet.
+- **Interpreter only.** Single-core interpreter (`ENABLE_AARCH64_RECOMPILER=OFF`); no performance work done.
+- **One title per session.** Stopping a running title (`CafeSystem::ShutdownTitle`) is not wired up. Close WiiPad from
+  the app switcher.
+- **Fixed preview surface.** The game renders into the 480×270 diagnostic view; `CafeRecreateCanvas` is ignored.
+- **No shared fonts.** System fonts are not bundled; titles that need them may show missing text.
 
 ## Selecting a title (iPad)
 
