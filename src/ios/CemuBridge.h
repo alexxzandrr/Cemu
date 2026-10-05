@@ -58,6 +58,11 @@ typedef NS_ENUM(NSInteger, WiiPadButton) {
 /// Returns the title name. One title per app session.
 - (nullable NSString *)launchTitleAtURL:(NSURL *)url error:(NSError **)error;
 
+/// Experimental: run the three Wii U cores on three host threads with Cemu's multi-core interpreter
+/// (desktop option --force-multicore-interpreter) instead of time-slicing them on one thread. Read when a title is
+/// launched; stored across launches.
+@property (nonatomic) BOOL multicoreInterpreter;
+
 /// The title selected in a previous session (resolved from its saved bookmark), or nil.
 @property (nonatomic, readonly, nullable) NSURL *savedTitleURL;
 

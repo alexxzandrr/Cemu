@@ -7,6 +7,7 @@
 #include "audio/IAudioAPI.h"
 
 #include "Cafe/CafeSystem.h"
+#include "config/LaunchSettings.h"
 #include "Cafe/Filesystem/fsc.h"
 #include "Cafe/HW/Latte/Core/Latte.h"
 #include "Cafe/TitleList/TitleInfo.h"
@@ -37,6 +38,7 @@ extern void (*g_cemuTitleLaunchStageCallback)(const char* stage, bool begin);
 
 static NSString* const kCemuBridgeErrorDomain = @"WiiPad.CemuBridge";
 static NSString* const kSavedTitleBookmarkKey = @"WiiPadSavedTitleBookmark";
+static NSString* const kMulticoreInterpreterKey = @"WiiPadMulticoreInterpreter";
 
 namespace
 {
@@ -255,6 +257,7 @@ namespace
 	}
 
 	std::atomic_bool s_monitorStop{ false };
+	bool s_multicoreInterpreter = false; // set at title launch
 
 	void OnTitleLaunchStage(const char* stage, bool begin)
 	{
@@ -264,7 +267,8 @@ namespace
 		else if (strstr(stage, "game initialization") && !begin)
 			WiiPadLog::Write("game initialization completed (coreinit entrypoint returned)");
 		else if (strstr(stage, "PPC scheduler"))
-			WiiPadLog::Write("PPC scheduler started: game code now runs on the single-core interpreter");
+			WiiPadLog::Write(s_multicoreInterpreter ? "PPC scheduler started: game code now runs on the multi-core interpreter (3 host threads)"
+				: "PPC scheduler started: game code now runs on the single-core interpreter");
 		else
 			WiiPadLog::Write(fmt::format("boot stage {}: {}", begin ? "begin" : "end  ", stage));
 	}
@@ -573,6 +577,17 @@ namespace
 	}
 }
 
+- (BOOL)multicoreInterpreter
+{
+	return [NSUserDefaults.standardUserDefaults boolForKey:kMulticoreInterpreterKey];
+}
+
+- (void)setMulticoreInterpreter:(BOOL)enabled
+{
+	[NSUserDefaults.standardUserDefaults setBool:enabled forKey:kMulticoreInterpreterKey];
+	WiiPadLog::Write(fmt::format("setting: multi-core interpreter {}", enabled ? "on" : "off"));
+}
+
 - (BOOL)titleLaunched
 {
 	return _titleLaunched;
@@ -702,10 +717,16 @@ namespace
 		if (!WiiPadInput::ConnectGamePad())
 			WiiPadLog::Write("input: continuing without GamePad input");
 
+		// CPU emulation: the single-core interpreter (default) or, if enabled, Cemu's multi-core interpreter, selected the
+		// same way as the desktop command line option. No recompiler/JIT either way.
+		s_multicoreInterpreter = self.multicoreInterpreter;
+		if (s_multicoreInterpreter)
+			LaunchSettings::HandleCommandline(std::vector<std::wstring>{ L"--force-multicore-interpreter" });
 		CafeSystem::SetImplementation(&s_systemImplementation);
 		g_cemuTitleLaunchStageCallback = &OnTitleLaunchStage;
 		WiiPadLog::SetStage("game initialization started");
-		WiiPadLog::Write("game initialization started: CafeSystem::LaunchForegroundTitle() (CPU: single-core interpreter)");
+		WiiPadLog::Write(fmt::format("game initialization started: CafeSystem::LaunchForegroundTitle() (CPU: {})",
+			LaunchSettings::ForceMultiCoreInterpreter() ? "multi-core interpreter, experimental" : "single-core interpreter"));
 		CafeSystem::LaunchForegroundTitle();
 		_titleLaunched = YES;
 		StartProgressMonitor();

@@ -154,6 +154,7 @@ struct ContentView: View {
     @StateObject private var model = BootModel()
     @State private var showImporter = false
     @State private var importerTypes: [UTType] = [.folder]
+    @State private var multicoreInterpreter = CemuBridge.shared.multicoreInterpreter
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -220,6 +221,12 @@ struct ContentView: View {
                 Text("Folder: an extracted title's root (with code, content and meta). File: .wua, .wud, .wux, .wuhb or a homebrew .rpx. Disc images also need keys.txt in WiiPad's folder.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
+                Toggle("Multi-core interpreter (experimental: three host threads for the three Wii U cores)", isOn: $multicoreInterpreter)
+                    .font(.footnote)
+                    .frame(maxWidth: 620)
+                    .onChange(of: multicoreInterpreter) { enabled in
+                        CemuBridge.shared.multicoreInterpreter = enabled
+                    }
             }
 
             if model.finished && !model.titleLaunched {
