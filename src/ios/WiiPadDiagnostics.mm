@@ -15,6 +15,9 @@
 #include <thread>
 #include <unordered_map>
 
+// Cafe/HW/Espresso/PPCTimer.cpp: host counter (cntvct_el0) frequency measured at startup; guest time derives from it
+extern uint64 _rdtscFrequency;
+
 namespace WiiPadDiag
 {
 	Counter vpadRead, schedulerEvents, audioPlay, audioFeed, audioRender, audioRenderData;
@@ -296,6 +299,10 @@ namespace
 		size_t nextSnapshot = 0;
 
 		WiiPadLog::Write("diag: monitor started (heartbeat every 2 s for 30 s, then every 10 s; thread snapshots at +3/15/60/180/600 s)");
+		uint64_t cntfrq = 0;
+		asm volatile("mrs %0, cntfrq_el0" : "=r"(cntfrq));
+		WiiPadLog::Write(fmt::format("diag: PPC timer: measured host counter frequency {} Hz (cntfrq_el0 reports {} Hz); guest time stalls if this is 0 or wrong",
+			_rdtscFrequency, cntfrq));
 		while (true)
 		{
 			const double t = (NowNs() - s_startNs) / 1e9;
