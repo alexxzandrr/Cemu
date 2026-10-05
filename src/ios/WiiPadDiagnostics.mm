@@ -5,6 +5,7 @@
 #include "Cafe/OS/libs/coreinit/coreinit_Scheduler.h"
 #include "Cafe/OS/libs/coreinit/coreinit_Thread.h"
 #include "Cafe/OS/RPL/rpl_symbol_storage.h"
+#include "util/helpers/helpers.h"
 
 #include <chrono>
 #include <cxxabi.h>
@@ -329,7 +330,7 @@ namespace
 
 	void MonitorThread()
 	{
-		SetThreadName("WiiPadDiag");
+		::SetThreadName("WiiPadDiag");
 		s_startNs = NowNs();
 		std::unordered_map<thread_act_t, double> lastCpuHeartbeat, lastCpuSnapshot;
 		Snapshot prev = Snapshot::Take();
