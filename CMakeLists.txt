@@ -137,6 +137,15 @@ option(ENABLE_VULKAN "Enables the Vulkan backend" ON)
 option(ENABLE_METAL "Enables the Metal backend" ${ENABLE_METAL_DEFAULT})
 option(ENABLE_DISCORD_RPC "Enables the Discord Rich Presence feature" ON)
 
+# AArch64 PPC recompiler (JIT) backend. Off for iOS: WiiPad is interpreter-only until executable memory is
+# solved there, and the backend's global code generators allocate MAP_JIT memory at load time (see docs/ipados).
+if (CEMU_IOS)
+	set(ENABLE_AARCH64_RECOMPILER_DEFAULT OFF)
+else()
+	set(ENABLE_AARCH64_RECOMPILER_DEFAULT ON)
+endif()
+option(ENABLE_AARCH64_RECOMPILER "Build the AArch64 PPC recompiler backend (ARM64 hosts only)" ${ENABLE_AARCH64_RECOMPILER_DEFAULT})
+
 if (ENABLE_METAL AND NOT APPLE)
     message(FATAL_ERROR "Metal backend is only supported on Apple platforms")
 endif()
@@ -277,7 +286,7 @@ if (CMAKE_OSX_ARCHITECTURES)
 else()
 	set(CEMU_ARCHITECTURE ${CMAKE_SYSTEM_PROCESSOR})
 endif()
-if(CEMU_ARCHITECTURE MATCHES "(aarch64)|(AARCH64)|(arm64)|(ARM64)")
+if(CEMU_ARCHITECTURE MATCHES "(aarch64)|(AARCH64)|(arm64)|(ARM64)" AND ENABLE_AARCH64_RECOMPILER)
 	add_subdirectory("dependencies/xbyak_aarch64" EXCLUDE_FROM_ALL)
 endif()
 

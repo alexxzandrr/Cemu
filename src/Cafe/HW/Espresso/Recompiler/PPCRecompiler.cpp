@@ -240,6 +240,10 @@ PPCRecFunction_t* PPCRecompiler_recompileFunction(PPCFunctionBoundaryTracker::PP
 	{
 		return nullptr;
 	}
+#elif defined(__aarch64__) && defined(CEMU_AARCH64_RECOMPILER_DISABLED)
+	// no code generator in this build (PPCRecompiler_init never enables the recompiler)
+	delete ppcRecFunc;
+	return nullptr;
 #elif defined(__aarch64__)
 	bool aarch64GenerationSuccess = PPCRecompiler_generateAArch64Code(ppcRecFunc, &ppcImlGenContext);
 	if (aarch64GenerationSuccess == false)
@@ -676,6 +680,10 @@ void PPCRecompiler_init()
 		cemuLog_log(LogType::Force, "Recompiler disabled. Command line --force-interpreter or force-multicore-interpreter was passed");
 		return;
 	}
+#if defined(__aarch64__) && defined(CEMU_AARCH64_RECOMPILER_DISABLED)
+	cemuLog_log(LogType::Force, "Recompiler not available: this build has no AArch64 recompiler backend (ENABLE_AARCH64_RECOMPILER=OFF)");
+	return;
+#endif
 	if (ppcRecompilerInstanceData)
 	{
 		MemMapper::FreeReservation(ppcRecompilerInstanceData, sizeof(PPCRecompilerInstanceData_t));
@@ -686,7 +694,7 @@ void PPCRecompiler_init()
 	MemMapper::AllocateMemory(&(ppcRecompilerInstanceData->_x64XMM_xorNegateMaskBottom), sizeof(PPCRecompilerInstanceData_t) - offsetof(PPCRecompilerInstanceData_t, _x64XMM_xorNegateMaskBottom), MemMapper::PAGE_PERMISSION::P_RW, true);
 #ifdef ARCH_X86_64
 	PPCRecompilerX64Gen_generateRecompilerInterfaceFunctions();
-#elif defined(__aarch64__)
+#elif defined(__aarch64__) && !defined(CEMU_AARCH64_RECOMPILER_DISABLED)
 	PPCRecompilerAArch64Gen_generateRecompilerInterfaceFunctions();
 #endif
     PPCRecompiler_allocateRange(0, 0x1000); // the first entry is used for fallback to interpreter

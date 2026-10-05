@@ -88,5 +88,8 @@ EOF
 } >> "$OUT"
 objc=$(sed -n '/== Objective-C/,$p' "$OUT" | tr '\n' ' ' | cut -c1-3500)
 echo "::notice title=Startup ObjC metadata::$objc"
+# JIT backend check: is any AArch64 recompiler / xbyak object linked into the app?
+jit_objs=$(sed -n '/^# Object files:/,/^# Sections:/p' "$MAP" | grep -E "BackendAArch64|xbyak" | sed -E 's/.*\(([^)]*)\)$/\1/' | tr '\n' ' ')
+echo "::notice title=JIT backend objects linked::${jit_objs:-none (BackendAArch64 / xbyak not linked)}"
 head -120 "$OUT" || true
 exit 0 # diagnostics must never fail the build

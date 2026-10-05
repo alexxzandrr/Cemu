@@ -622,11 +622,16 @@ if(ENABLE_METAL)
 endif()
 
 if(CEMU_ARCHITECTURE MATCHES "(aarch64)|(AARCH64)|(arm64)|(ARM64)")
-  target_sources(CemuCafe PRIVATE
-    HW/Espresso/Recompiler/BackendAArch64/BackendAArch64.cpp
-    HW/Espresso/Recompiler/BackendAArch64/BackendAArch64.h
-  )
-  target_link_libraries(CemuCafe PRIVATE xbyak_aarch64)
+  if(ENABLE_AARCH64_RECOMPILER)
+    target_sources(CemuCafe PRIVATE
+      HW/Espresso/Recompiler/BackendAArch64/BackendAArch64.cpp
+      HW/Espresso/Recompiler/BackendAArch64/BackendAArch64.h
+    )
+    target_link_libraries(CemuCafe PRIVATE xbyak_aarch64)
+  else()
+    # interpreter-only build (iOS): no AArch64 code generator is compiled or linked
+    target_compile_definitions(CemuCafe PRIVATE CEMU_AARCH64_RECOMPILER_DISABLED)
+  endif()
 endif()
 
 set_property(TARGET CemuCafe PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")

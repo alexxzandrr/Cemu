@@ -19,6 +19,7 @@
 #include <sys/stat.h>
 #include <typeinfo>
 #include <unistd.h>
+#include <dispatch/dispatch.h>
 
 extern "C" char* __cxa_demangle(const char* mangled, char* buf, size_t* len, int* status);
 
@@ -123,6 +124,14 @@ namespace
 		W(", slide "); WHex((uintptr_t)_dyld_get_image_vmaddr_slide(0)); W("\n");
 		W("2. Cemu static initializers run next. If the app aborts before main(), the cause is recorded below.\n");
 		Flush();
+
+		// Runs only once main() -> UIApplicationMain is servicing the main queue, i.e. all static initializers finished.
+		dispatch_async(dispatch_get_main_queue(), ^{
+			W("3. main() reached: all static initializers completed, main run loop running. C++ throws during startup: ");
+			WDec(s_throwCount);
+			W("\n");
+			Flush();
+		});
 
 		const int signals[] = { SIGABRT, SIGSEGV, SIGBUS, SIGILL, SIGTRAP, SIGFPE };
 		for (int sig : signals)
