@@ -3,6 +3,10 @@
 #include "WiiPadLog.h"
 
 #include "Cafe/CafeSystem.h"
+#include "Cafe/Filesystem/fsc.h"
+#include "Cafe/HW/Latte/Core/Latte.h"
+#include "Cafe/TitleList/TitleInfo.h"
+#include "Cafe/TitleList/TitleList.h"
 #include "Cafe/HW/Latte/Core/LatteOverlay.h"
 #include "Cafe/HW/Latte/Renderer/Metal/MetalRenderer.h"
 #include "Cafe/HW/Latte/Renderer/Renderer.h"
@@ -19,12 +23,16 @@
 #include <os/proc.h>
 #include <sys/mman.h>
 #include <sys/sysctl.h>
+#include <thread>
 
 // provided by src/main.cpp
 void CemuCommonInit();
 extern void (*g_cemuCommonInitStageCallback)(const char* stage, bool begin);
+// provided by src/Cafe/CafeSystem.cpp
+extern void (*g_cemuTitleLaunchStageCallback)(const char* stage, bool begin);
 
 static NSString* const kCemuBridgeErrorDomain = @"WiiPad.CemuBridge";
+static NSString* const kSavedTitleBookmarkKey = @"WiiPadSavedTitleBookmark";
 
 namespace
 {
@@ -214,6 +222,120 @@ namespace
 			WiiPadLog::Write(fmt::format("Metal: BC texture compression {}", device->supportsBCTextureCompression() ? "supported" : "NOT supported (software decode needed)"));
 		device->release();
 	}
+
+	// ---------------- Phase 2A: title launch ----------------
+
+	const char* TitleFormatName(TitleInfo::TitleDataFormat format)
+	{
+		switch (format)
+		{
+		case TitleInfo::TitleDataFormat::HOST_FS: return "extracted folder (code/content/meta)";
+		case TitleInfo::TitleDataFormat::WUD: return "disc image (.wud/.wux)";
+		case TitleInfo::TitleDataFormat::WIIU_ARCHIVE: return "Wii U archive (.wua)";
+		case TitleInfo::TitleDataFormat::NUS: return "NUS (title.tmd)";
+		case TitleInfo::TitleDataFormat::WUHB: return "Wii U homebrew bundle (.wuhb)";
+		default: return "invalid";
+		}
+	}
+
+	std::string InvalidReasonText(TitleInfo::InvalidReason reason)
+	{
+		switch (reason)
+		{
+		case TitleInfo::InvalidReason::BAD_PATH_OR_INACCESSIBLE: return "the path is not accessible";
+		case TitleInfo::InvalidReason::UNKNOWN_FORMAT: return "not a recognized Wii U title. Pick the title's root folder (with code, content and meta) or a .wua / .wud / .wux / .wuhb / .rpx file";
+		case TitleInfo::InvalidReason::NO_DISC_KEY: return "the disc image cannot be decrypted: put a keys.txt with this title's disc key into WiiPad's Documents folder";
+		case TitleInfo::InvalidReason::NO_TITLE_TIK: return "the title cannot be decrypted because title.tik (or the meta .xml files) is missing";
+		default: return "invalid title (unknown reason)";
+		}
+	}
+
+	std::atomic_bool s_monitorStop{ false };
+
+	void OnTitleLaunchStage(const char* stage, bool begin)
+	{
+		WiiPadLog::SetStage(stage);
+		if (strstr(stage, "RPX/RPL loading"))
+			WiiPadLog::Write(begin ? "RPX/RPL loading started (coreinit + main executable)" : "RPX/RPL loading completed");
+		else if (strstr(stage, "game initialization") && !begin)
+			WiiPadLog::Write("game initialization completed (coreinit entrypoint returned)");
+		else if (strstr(stage, "PPC scheduler"))
+			WiiPadLog::Write("PPC scheduler started: game code now runs on the single-core interpreter");
+		else
+			WiiPadLog::Write(fmt::format("boot stage {}: {}", begin ? "begin" : "end  ", stage));
+	}
+
+	// CafeSystem calls back into the frontend through this interface (desktop: MainWindow).
+	class WiiPadSystemImplementation : public CafeSystem::SystemImplementation
+	{
+	public:
+		void CafeRecreateCanvas() override
+		{
+			WiiPadLog::Write("CafeSystem requested a canvas recreation (not supported in Phase 2A; ignored)");
+		}
+
+		void CafePPCProcessExit() override
+		{
+			auto status = CafeSystem::GetForegroundTitleReturnStatus();
+			WiiPadLog::Write(fmt::format("emulated title process exited (return status {})", status ? std::to_string(*status) : std::string("unknown")));
+		}
+	};
+	WiiPadSystemImplementation s_systemImplementation;
+
+	// Read-only check of the mounted code folder before launch. CafeSystem's LoadMainExecutable() runs on the
+	// launch thread and traps (cemu_assert) if no .rpx exists; catching that case here keeps it a reportable error.
+	bool MountedCodeFolderHasRPX(std::string& firstRpx)
+	{
+		sint32 status = 0;
+		FSCVirtualFile* dir = fsc_openDirIterator("/internal/current_title/code/", &status);
+		if (!dir)
+			return false;
+		FSCDirEntry entry;
+		bool found = false;
+		while (fsc_nextDir(dir, &entry))
+		{
+			size_t len = strlen(entry.path);
+			if (len >= 4 && boost::iequals(entry.path + len - 4, ".rpx"))
+			{
+				firstRpx = entry.path;
+				found = true;
+				break;
+			}
+		}
+		fsc_close(dir);
+		return found;
+	}
+
+	// Logs how far the running title gets: GPU init, the game's GX2Init() call and presented frames.
+	void StartProgressMonitor()
+	{
+		std::thread([] {
+			SetThreadName("WiiPadMonitor");
+			bool gpuInit = false;
+			uint32 gx2Init = 0, flips = 0;
+			const auto start = std::chrono::steady_clock::now();
+			while (!s_monitorStop && std::chrono::steady_clock::now() - start < std::chrono::minutes(5))
+			{
+				const double t = std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
+				if (!gpuInit && g_isGPUInitFinished)
+				{
+					gpuInit = true;
+					WiiPadLog::Write(fmt::format("progress +{:.1f}s: GPU thread initialized (renderer, shader cache)", t));
+				}
+				if (LatteGPUState.gx2InitCalled != gx2Init)
+				{
+					gx2Init = LatteGPUState.gx2InitCalled;
+					WiiPadLog::Write(fmt::format("progress +{:.1f}s: game called GX2Init() (count {})", t, gx2Init));
+				}
+				const uint32 f = LatteGPUState.flipCounter;
+				if (f != flips && (flips == 0 || f / 60 != flips / 60))
+					WiiPadLog::Write(fmt::format("progress +{:.1f}s: {} frames presented", t, f));
+				flips = f;
+				std::this_thread::sleep_for(std::chrono::milliseconds(250));
+			}
+			WiiPadLog::Write(fmt::format("progress monitor stopped (GPU init {}, GX2Init calls {}, frames {})", gpuInit ? "yes" : "no", gx2Init, flips));
+		}).detach();
+	}
 }
 
 @implementation CemuBridge
@@ -223,6 +345,11 @@ namespace
 	BOOL _rendererInitialized;
 	BOOL _shutDown; // Cemu's global state cannot be re-initialized in the same process
 	NSString* _logPath;
+	// Phase 2A title state
+	NSURL* _titleURL;           // kept alive while security-scoped access is held
+	BOOL _titleAccessStarted;
+	BOOL _titlePrepareAttempted; // CafeSystem was asked to mount/prepare a title (no second attempt per session)
+	BOOL _titleLaunched;
 }
 
 + (CemuBridge*)shared
@@ -430,10 +557,158 @@ namespace
 	}
 }
 
+- (BOOL)titleLaunched
+{
+	return _titleLaunched;
+}
+
+- (nullable NSURL*)savedTitleURL
+{
+	NSData* bookmark = [NSUserDefaults.standardUserDefaults dataForKey:kSavedTitleBookmarkKey];
+	if (!bookmark)
+		return nil;
+	BOOL stale = NO;
+	NSError* error = nil;
+	NSURL* url = [NSURL URLByResolvingBookmarkData:bookmark options:0 relativeToURL:nil bookmarkDataIsStale:&stale error:&error];
+	if (!url)
+	{
+		WiiPadLog::Write("saved title bookmark could not be resolved: " + ToStd(error.localizedDescription));
+		return nil;
+	}
+	if (stale)
+		WiiPadLog::Write("saved title bookmark is stale; it is refreshed when the title is opened");
+	return url;
+}
+
+- (nullable NSString*)launchTitleAtURL:(NSURL*)url error:(NSError**)error
+{
+	std::lock_guard lock(_mutex);
+	auto fail = [&](const std::string& message) -> NSString* {
+		WiiPadLog::Write("title load failed: " + message);
+		if (error)
+			*error = MakeError([NSString stringWithUTF8String:message.c_str()]);
+		return nil;
+	};
+
+	WiiPadLog::Section("CemuBridge: load title");
+	WiiPadLog::Write("title URL selected: " + ToStd(url.lastPathComponent));
+	if (_titleLaunched)
+		return fail("a title is already running. Restart WiiPad to load another title.");
+	if (_titlePrepareAttempted)
+		return fail("a previous title failed after Cemu started preparing it. Restart WiiPad before loading another title.");
+	if (_shutDown || !_coreInitialized || !_rendererInitialized)
+		return fail("the Cemu core and Metal renderer must be initialized first (restart WiiPad).");
+
+	// --- security-scoped access (held for the rest of the session) ---
+	if (_titleAccessStarted && _titleURL)
+	{
+		[_titleURL stopAccessingSecurityScopedResource];
+		_titleAccessStarted = NO;
+	}
+	_titleURL = url;
+	_titleAccessStarted = [url startAccessingSecurityScopedResource];
+	WiiPadLog::Write(_titleAccessStarted ? "security-scoped access started"
+		: "security-scoped access not required for this URL (e.g. inside WiiPad's own container)");
+
+	// bookmark so the same title can be reopened next session without the picker
+	NSError* bookmarkError = nil;
+	NSData* bookmark = [url bookmarkDataWithOptions:0 includingResourceValuesForKeys:nil relativeToURL:nil error:&bookmarkError];
+	if (bookmark)
+		[NSUserDefaults.standardUserDefaults setObject:bookmark forKey:kSavedTitleBookmarkKey];
+	else
+		WiiPadLog::Write("could not save a bookmark for this title: " + ToStd(bookmarkError.localizedDescription));
+
+	// --- resolve to a POSIX path Cemu can use while access is held ---
+	const fs::path titlePath = _utf8ToPath(url.fileSystemRepresentation);
+	WiiPadLog::Write("resolved title path: " + _pathToUtf8(titlePath));
+	std::error_code ec;
+	const bool exists = fs::exists(titlePath, ec);
+	const bool isDirectory = exists && fs::is_directory(titlePath, ec);
+	if (!exists)
+		return fail(fmt::format("the selected item is not accessible at its path ({}). If it is in iCloud Drive, download it first or store it On My iPad.",
+			ec ? ec.message() : "does not exist"));
+	WiiPadLog::Write(fmt::format("path is accessible ({})", isDirectory ? "folder" : fmt::format("file, {} bytes", fs::file_size(titlePath, ec))));
+
+	try
+	{
+		// --- identify the title (same logic as the desktop MainWindow::FileLoad) ---
+		TitleInfo launchTitle{ titlePath };
+		CafeSystem::PREPARE_STATUS_CODE result;
+		if (launchTitle.IsValid())
+		{
+			WiiPadLog::Write(fmt::format("title metadata loaded: \"{}\", title id {:016x}, version {}, format {}",
+				launchTitle.GetMetaTitleName(), launchTitle.GetAppTitleId(), launchTitle.GetAppTitleVersion(), TitleFormatName(launchTitle.GetFormat())));
+			CafeTitleList::AddTitleFromPath(titlePath);
+			TitleId baseTitleId;
+			if (!CafeTitleList::FindBaseTitleId(launchTitle.GetAppTitleId(), baseTitleId))
+				return fail("unable to launch: the base files for this title were not found (an update or DLC was selected instead of the game).");
+			WiiPadLog::Write(fmt::format("Cafe boot requested: CafeSystem::PrepareForegroundTitle({:016x})", baseTitleId));
+			_titlePrepareAttempted = YES;
+			result = CafeSystem::PrepareForegroundTitle(baseTitleId);
+		}
+		else
+		{
+			const CafeTitleFileType fileType = isDirectory ? CafeTitleFileType::UNKNOWN : DetermineCafeSystemFileType(titlePath);
+			if (fileType == CafeTitleFileType::RPX || fileType == CafeTitleFileType::ELF)
+			{
+				WiiPadLog::Write(fmt::format("title metadata: none (standalone {}); Cafe boot requested: CafeSystem::PrepareForegroundTitleFromStandaloneRPX",
+					fileType == CafeTitleFileType::RPX ? "RPX" : "ELF"));
+				_titlePrepareAttempted = YES;
+				result = CafeSystem::PrepareForegroundTitleFromStandaloneRPX(titlePath);
+			}
+			else
+				return fail("unable to load: " + InvalidReasonText(launchTitle.GetInvalidReason()) + ".");
+		}
+
+		switch (result)
+		{
+		case CafeSystem::PREPARE_STATUS_CODE::SUCCESS:
+			break;
+		case CafeSystem::PREPARE_STATUS_CODE::INVALID_RPX:
+			return fail("Cemu reported an invalid RPX executable (PREPARE_STATUS_CODE::INVALID_RPX). See log.txt.");
+		case CafeSystem::PREPARE_STATUS_CODE::UNABLE_TO_MOUNT:
+			return fail("Cemu could not mount the title (PREPARE_STATUS_CODE::UNABLE_TO_MOUNT): game meta files missing, inaccessible or invalid. See log.txt.");
+		default:
+			return fail(fmt::format("Cemu failed to prepare the title (status {}). See log.txt.", (int)result));
+		}
+		WiiPadLog::Write(fmt::format("title prepared: \"{}\" ({:016x})", CafeSystem::GetForegroundTitleName(), CafeSystem::GetForegroundTitleId()));
+
+		std::string rpx;
+		if (launchTitle.IsValid())
+		{
+			if (!MountedCodeFolderHasRPX(rpx))
+				return fail("the title's code folder contains no .rpx executable, so Cemu cannot boot it.");
+			WiiPadLog::Write("main executable found: code/" + rpx);
+		}
+
+		// --- boot ---
+		CafeSystem::SetImplementation(&s_systemImplementation);
+		g_cemuTitleLaunchStageCallback = &OnTitleLaunchStage;
+		WiiPadLog::SetStage("game initialization started");
+		WiiPadLog::Write("game initialization started: CafeSystem::LaunchForegroundTitle() (CPU: single-core interpreter)");
+		CafeSystem::LaunchForegroundTitle();
+		_titleLaunched = YES;
+		StartProgressMonitor();
+		LogMemoryState("after LaunchForegroundTitle");
+		return [NSString stringWithUTF8String:CafeSystem::GetForegroundTitleName().c_str()];
+	}
+	catch (const std::exception& ex)
+	{
+		return fail(std::string("game initialization failed: C++ exception: ") + ex.what());
+	}
+}
+
 - (void)shutdown
 {
 	std::lock_guard lock(_mutex);
 	WiiPadLog::Section("CemuBridge: shutdown");
+	if (_titleLaunched)
+	{
+		// Stopping a running title (CafeSystem::ShutdownTitle) is not wired up in Phase 2A.
+		WiiPadLog::Write("a title is running: in-app shutdown is not supported in Phase 2A. Close WiiPad from the app switcher.");
+		cemuLog_waitForFlush();
+		return;
+	}
 	if (_rendererInitialized)
 	{
 		WiiPadLog::Write("MetalRenderer: shutting down layer");
@@ -448,6 +723,12 @@ namespace
 		CafeSystem::Shutdown();
 		_coreInitialized = NO;
 		WiiPadLog::Write("CafeSystem: shut down");
+	}
+	if (_titleAccessStarted && _titleURL)
+	{
+		[_titleURL stopAccessingSecurityScopedResource];
+		_titleAccessStarted = NO;
+		WiiPadLog::Write("security-scoped access stopped");
 	}
 	cemuLog_waitForFlush();
 	LogMemoryState("after shutdown");

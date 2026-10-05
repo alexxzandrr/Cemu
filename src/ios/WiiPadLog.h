@@ -24,6 +24,10 @@ namespace WiiPadLog
 	// Call again after CemuCommonInit() so the chain includes Cemu's handler.
 	void InstallFatalSignalHandlers();
 
+	// Current boot stage (a string literal with static lifetime). Printed by the fatal signal handler so a
+	// crash during title launch shows where it happened.
+	void SetStage(const char* stage);
+
 	const std::string& Path();
 
 	// Session marker: lets the next launch detect a crash or forced kill of this one.

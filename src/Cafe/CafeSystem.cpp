@@ -362,6 +362,16 @@ uint32 LoadSharedData()
 	return mmuRange_SHARED_AREA.getBase() + sizeof(SharedDataEntry) * numEntries;
 }
 
+// Optional observer for title launch progress. Unused (null) on desktop; the iPadOS bridge
+// sets it to write each stage to its crash-safe log file. Does not change launch behaviour.
+void (*g_cemuTitleLaunchStageCallback)(const char* stage, bool begin) = nullptr;
+
+static void TitleLaunchStage(const char* stage, bool begin)
+{
+	if (g_cemuTitleLaunchStageCallback)
+		g_cemuTitleLaunchStageCallback(stage, begin);
+}
+
 void cemu_initForGame()
 {
 	WindowSystem::UpdateWindowTitles(false, true, 0.0);
@@ -384,15 +394,19 @@ void cemu_initForGame()
 	ppcCyclesSince2000TimerClock = ppcCyclesSince2000 / 20ULL;
 	PPCTimer_start();
 	// coreinit is bootstrapped first and then the main game executable is loaded
+	TitleLaunchStage("RPX/RPL loading (coreinit + main executable)", true);
 	RPLLoader_LoadCoreinit();
 	LoadMainExecutable();
+	TitleLaunchStage("RPX/RPL loading (coreinit + main executable)", false);
 	// log info for launched title
 	InfoLog_TitleLoaded();
 	// link all modules
+	TitleLaunchStage("RPL linking", true);
 	uint32 linkTimeStart = GetTickCount();
 	RPLLoader_UpdateDependencies();
 	RPLLoader_Link();
 	RPLLoader_NotifyControlPassedToApplication();
+	TitleLaunchStage("RPL linking", false);
 	uint32 linkTime = GetTickCount() - linkTimeStart;
 	cemuLog_log(LogType::Force, "RPL link time: {}ms", linkTime);
 	// for HBL ELF: Setup OS-specifics struct
@@ -408,7 +422,9 @@ void cemu_initForGame()
 	}
 	LatteGPUState.isDRCPrimary = ActiveSettings::DisplayDRCEnabled();
 	InfoLog_PrintActiveSettings();
+	TitleLaunchStage("GPU thread start (renderer initialization)", true);
 	Latte_Start();
+	TitleLaunchStage("GPU thread start (renderer initialization)", false);
 	// check for debugger entrypoint bp
     if (g_gdbstub)
     {
@@ -425,9 +441,13 @@ void cemu_initForGame()
 	// everything initialized
 	cemuLog_log(LogType::Force, "------- Run title -------");
 	// wait till GPU thread is initialized
+	TitleLaunchStage("GPU initialization (shader cache, registers)", true);
 	while (g_isGPUInitFinished == false) std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	TitleLaunchStage("GPU initialization (shader cache, registers)", false);
 	// run coreinit rpl_entry
+	TitleLaunchStage("game initialization (coreinit entrypoint)", true);
 	RPLLoader_CallCoreinitEntrypoint();
+	TitleLaunchStage("game initialization (coreinit entrypoint)", false);
 	// init AX and start AX I/O thread
 	snd_core::AXOut_init();
 }
@@ -909,6 +929,7 @@ namespace CafeSystem
 		for(auto& module : s_iosuModules)
 			module->TitleStart();
 		cemu_initForGame();
+		TitleLaunchStage("PPC scheduler (game threads)", true);
 		// enter scheduler
 		if ((ActiveSettings::GetCPUMode() == CPUMode::MulticoreRecompiler || LaunchSettings::ForceMultiCoreInterpreter()) && !LaunchSettings::ForceInterpreter())
 			coreinit::OSSchedulerBegin(3);

@@ -26,7 +26,23 @@ NS_ASSUME_NONNULL_BEGIN
 /// Requires initializeCore first.
 - (BOOL)initializeRendererInView:(UIView *)view error:(NSError **)error;
 
+/// Hands a user-selected Wii U title to Cemu's existing title-loading/boot path
+/// (TitleInfo -> CafeTitleList -> CafeSystem::PrepareForegroundTitle -> CafeSystem::LaunchForegroundTitle).
+/// `url` comes from the Files picker and may be security-scoped; access is held for the rest of the session
+/// and a bookmark is saved so the title can be reopened next launch.
+/// Accepts a title root folder (code/content/meta), a .wua / .wud / .wux / .wuhb file, or a standalone .rpx / .elf.
+/// Blocking (identification + mounting); call off the main thread. Requires core and renderer.
+/// Returns the title name. One title per app session.
+- (nullable NSString *)launchTitleAtURL:(NSURL *)url error:(NSError **)error;
+
+/// The title selected in a previous session (resolved from its saved bookmark), or nil.
+@property (nonatomic, readonly, nullable) NSURL *savedTitleURL;
+
+/// YES once a title was handed to CafeSystem::LaunchForegroundTitle in this session.
+@property (nonatomic, readonly) BOOL titleLaunched;
+
 /// Tears down the renderer and CafeSystem and flushes the logs.
+/// Not supported while a title is running (Phase 2A); in that case it only logs.
 - (void)shutdown;
 
 /// Writes an app-side event into WiiPad.log.

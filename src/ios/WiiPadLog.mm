@@ -8,6 +8,7 @@
 #include <ctime>
 #include <exception>
 #include <mutex>
+#include <atomic>
 #include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
@@ -21,6 +22,7 @@ namespace
 	std::string s_path;
 	std::string s_markerPath;
 	bool s_previousUnclean = false;
+	std::atomic<const char*> s_stage{ nullptr };
 
 	constexpr int kFatalSignals[] = { SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT, SIGTRAP };
 	struct sigaction s_previousActions[32]{};
@@ -109,6 +111,11 @@ namespace
 		SignalSafeWrite(SignalName(sig));
 		SignalSafeWrite(" fault address ");
 		SignalSafeWriteHex(info ? (uintptr_t)info->si_addr : 0);
+		if (const char* stage = s_stage.load())
+		{
+			SignalSafeWrite("\n!!! last stage: ");
+			SignalSafeWrite(stage);
+		}
 		SignalSafeWrite("\n!!! The app is crashing. See also log.txt and stdout.txt in this folder.\n");
 		if (s_fd >= 0)
 			fsync(s_fd);
@@ -228,6 +235,11 @@ namespace WiiPadLog
 			if (sigaction(sig, &action, &s_previousActions[sig]) == 0)
 				s_handlerInstalled[sig] = true;
 		}
+	}
+
+	void SetStage(const char* stage)
+	{
+		s_stage.store(stage);
 	}
 
 	const std::string& Path()
