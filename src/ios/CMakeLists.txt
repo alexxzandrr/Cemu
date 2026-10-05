@@ -7,6 +7,7 @@
 #   - WiiPadLog.mm        : crash-safe file log in the app's Documents folder
 #   - FiberIOS.cpp        : util/Fiber/Fiber.h on Boost.Context fcontext (iOS has no working ucontext)
 #   - WiiPadTouchController.cpp : on-screen controls as a Cemu input device for the emulated GamePad (VPAD)
+#   - WiiPadMotion.mm     : iPad gyroscope/accelerometer (Core Motion) as GamePad motion
 #   - IOSAudioAPI.mm      : IAudioAPI backend (RemoteIO AudioUnit), registered in audio/IAudioAPI.cpp
 #   - ../main.cpp         : provides CemuCommonInit(); its desktop main() is excluded on iOS
 #
@@ -26,6 +27,8 @@ add_library(WiiPadPlatform STATIC
 	WiiPadLog.mm
 	WiiPadTouchController.h
 	WiiPadTouchController.cpp
+	WiiPadMotion.h
+	WiiPadMotion.mm
 	WiiPadDiagnostics.h
 	WiiPadDiagnostics.mm
 )

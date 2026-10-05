@@ -24,6 +24,7 @@ namespace WiiPadDiag
 	extern Counter audioFeed;       // IOSAudioAPI::FeedBlock (game audio blocks)
 	extern Counter audioRender;     // RemoteIO render callback invocations
 	extern Counter audioRenderData; // render callbacks that had game samples
+	extern Counter motionSamples;   // Core Motion samples fused into GamePad motion
 
 	// Starts the monitor thread (once). Call right after CafeSystem::LaunchForegroundTitle().
 	void StartMonitor();

@@ -77,6 +77,9 @@ typedef NS_ENUM(NSInteger, WiiPadButton) {
 /// Touch on the game view, position normalized to [0, 1] with a top-left origin. Becomes GamePad touchscreen input.
 - (void)setGameViewTouchDown:(BOOL)down x:(float)x y:(float)y;
 
+/// Resets GamePad motion (iPad gyroscope/accelerometer): the current pose becomes the starting pose.
+- (void)recenterMotion;
+
 /// Writes an app-side event into WiiPad.log.
 - (void)log:(NSString *)message;
 

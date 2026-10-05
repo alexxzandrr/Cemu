@@ -24,7 +24,7 @@ extern uint64 _rdtscFrequency;
 
 namespace WiiPadDiag
 {
-	Counter vpadRead, schedulerEvents, audioPlay, audioFeed, audioRender, audioRenderData;
+	Counter vpadRead, schedulerEvents, audioPlay, audioFeed, audioRender, audioRenderData, motionSamples;
 
 	static int64_t NowNs()
 	{
@@ -325,11 +325,11 @@ namespace
 
 	struct Snapshot
 	{
-		uint64_t vpad, sched, play, feed, render, renderData;
+		uint64_t vpad, sched, play, feed, render, renderData, motion;
 		static Snapshot Take()
 		{
 			return { vpadRead.count.load(), schedulerEvents.count.load(), audioPlay.count.load(),
-				audioFeed.count.load(), audioRender.count.load(), audioRenderData.count.load() };
+				audioFeed.count.load(), audioRender.count.load(), audioRenderData.count.load(), motionSamples.count.load() };
 		}
 	};
 
@@ -396,10 +396,10 @@ namespace
 			if (prevT > 0.0 || t > 0.5)
 			{
 				WiiPadLog::Write(fmt::format(
-					"diag: hb +{:.0f}s{} | sched events +{} | VPADRead +{} (total {}, last {}) | GX2Init {} flips {} | audio play {} feed +{} render +{} (with data +{}, last {})",
+					"diag: hb +{:.0f}s{} | sched events +{} | VPADRead +{} (total {}, last {}) | GX2Init {} flips {} | audio play {} feed +{} render +{} (with data +{}, last {}) | motion +{}",
 					t, hostLine, cur.sched - prev.sched, cur.vpad - prev.vpad, cur.vpad, Ago(vpadRead),
 					(uint32)LatteGPUState.gx2InitCalled, (uint32)LatteGPUState.flipCounter,
-					cur.play, cur.feed - prev.feed, cur.render - prev.render, cur.renderData - prev.renderData, Ago(audioRender)));
+					cur.play, cur.feed - prev.feed, cur.render - prev.render, cur.renderData - prev.renderData, Ago(audioRender), cur.motion - prev.motion));
 			}
 			prev = cur;
 			prevT = t;

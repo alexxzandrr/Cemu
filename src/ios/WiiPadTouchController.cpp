@@ -1,6 +1,7 @@
 #include "WiiPadTouchController.h"
 #include "WiiPadLog.h"
 #include "WiiPadDiagnostics.h"
+#include "WiiPadMotion.h"
 
 #include "input/InputManager.h"
 #include "input/api/Controller.h"
@@ -43,6 +44,10 @@ namespace
 		std::string_view api_name() const override { return to_string(InputAPI::WiiPadTouch); }
 		InputAPI::Type api() const override { return InputAPI::WiiPadTouch; }
 		bool is_connected() override { return true; }
+
+		// iPad gyroscope/accelerometer as GamePad motion (VPADController::update_motion uses it when use_motion())
+		bool has_motion() override { return WiiPadMotion::Available(); }
+		MotionSample get_motion_sample() override { return WiiPadMotion::GetSample(); }
 
 		// Called by VPADController::VPADRead (emulation thread) through update_state()
 		ControllerState raw_state() override
@@ -111,6 +116,11 @@ namespace WiiPadInput
 		{
 			auto controller = std::make_shared<WiiPadTouchController>();
 			controller->calibrate(); // nothing is pressed yet: neutral state
+			if (WiiPadMotion::Available())
+			{
+				controller->set_use_motion(true);
+				WiiPadMotion::Start();
+			}
 
 			auto& input = InputManager::instance();
 			auto emulated = input.set_controller(0, EmulatedController::Type::VPAD, controller);
@@ -153,8 +163,8 @@ namespace WiiPadInput
 
 			controller->EnableLogging();
 			const bool attached = input.get_vpad_controller(0) == emulated;
-			WiiPadLog::Write(fmt::format("input: Wii U GamePad connected (player 1, VPAD slot 0{}): WiiPad on-screen controls, {} mappings, touch -> GamePad touchscreen",
-				attached ? "" : " - NOT in slot 0", std::size(mappings)));
+			WiiPadLog::Write(fmt::format("input: Wii U GamePad connected (player 1, VPAD slot 0{}): WiiPad on-screen controls, {} mappings, touch -> GamePad touchscreen, motion: {}",
+				attached ? "" : " - NOT in slot 0", std::size(mappings), WiiPadMotion::Available() ? "iPad gyroscope + accelerometer" : "not available"));
 			return attached;
 		}
 		catch (const std::exception& ex)

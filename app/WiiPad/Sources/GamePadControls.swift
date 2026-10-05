@@ -97,7 +97,7 @@ struct PadDiamond: View {
     }
 }
 
-/// Left half of the GamePad: ZL/L, left stick, D-pad, −.
+/// Left half of the GamePad: ZL/L, left stick, D-pad, −, and the tilt (motion) recenter button.
 struct GamePadLeftPanel: View {
     var body: some View {
         VStack(spacing: 14) {
@@ -107,7 +107,15 @@ struct GamePadLeftPanel: View {
             }
             PadStick(stick: 0)
             PadDiamond(top: ("▲", .up), left: ("◀", .left), right: ("▶", .right), bottom: ("▼", .down), circle: false)
-            PadButton(title: "−", button: .minus, width: 44, height: 36)
+            HStack(spacing: 10) {
+                PadButton(title: "−", button: .minus, width: 44, height: 36)
+                // tilt controls use the iPad's gyroscope; this makes the current pose the starting pose again
+                Button("Recenter") {
+                    CemuBridge.shared.recenterMotion()
+                }
+                .font(.footnote)
+                .buttonStyle(.bordered)
+            }
         }
     }
 }

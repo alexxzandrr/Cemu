@@ -3,6 +3,7 @@
 #include "WiiPadLog.h"
 #include "WiiPadTouchController.h"
 #include "WiiPadDiagnostics.h"
+#include "WiiPadMotion.h"
 #include "audio/IAudioAPI.h"
 
 #include "Cafe/CafeSystem.h"
@@ -733,6 +734,11 @@ namespace
 	if (!_titleLaunched)
 		return;
 	WiiPadInput::SetTouch(down, x, y);
+}
+
+- (void)recenterMotion
+{
+	WiiPadMotion::Recenter();
 }
 
 - (void)shutdown
