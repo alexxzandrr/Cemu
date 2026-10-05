@@ -164,6 +164,10 @@ jobs:
         if: failure() && steps.app.outcome == 'failure'
         run: python3 .github/scripts/annotate_errors.py "WiiPad app" "$LOG_DIR/xcodebuild.log"
 
+      - name: "Diagnostics: list pre-main initializers in the WiiPad binary"
+        if: steps.app.outcome == 'success'
+        run: bash .github/scripts/list_initializers.sh "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/WiiPad.app/WiiPad" "$LOG_DIR/initializers.txt"
+
       - name: Package unsigned .ipa and verify
         run: |
           set -euo pipefail
