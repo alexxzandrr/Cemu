@@ -94,3 +94,7 @@ Diagnostic-only instrumentation (`src/ios/WiiPadDiagnostics.h/.mm`, lines prefix
   frame-pointer backtrace of the emulation, GPU, input and audio threads (and any busy thread); every emulated PPC
   thread (state, priority, suspend count, waited-on mutex/queue, saved PC/LR with RPL symbol), copied under
   `__OSTryLockScheduler` (never a blocking lock)
+- once, at the first snapshot: the measured PPC timer frequency, and a `ucontext` self-test (`getcontext` /
+  `makecontext` / `swapcontext` on the monitor thread with its own stack). Cemu's `FiberUnix.cpp` runs the scheduler
+  idle loop and every PPC thread on these calls without checking their results: if they are unsupported,
+  `Fiber::Switch` returns immediately and `OSSchedulerCoreEmulationThread` exits without running any guest code.

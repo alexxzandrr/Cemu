@@ -13,6 +13,8 @@
 #include <mach/thread_info.h>
 #include <pthread.h>
 #include <thread>
+#include <ucontext.h>
+#include <cerrno>
 #include <unordered_map>
 
 // Cafe/HW/Espresso/PPCTimer.cpp: host counter (cntvct_el0) frequency measured at startup; guest time derives from it
@@ -254,6 +256,43 @@ namespace
 		}
 	}
 
+	// ---------------- fiber (ucontext) self-test ----------------
+	// Cemu's FiberUnix.cpp runs every PPC thread and the scheduler idle loop on ucontext fibers and does not check
+	// return values. If these calls are unsupported, Fiber::Switch returns immediately and the scheduler thread exits.
+	// This test runs on the monitor thread with its own context and stack; it does not touch Cemu's fibers.
+
+	ucontext_t s_testMain, s_testFiber;
+	std::atomic_bool s_testFiberRan{ false };
+
+	void TestFiberEntry()
+	{
+		s_testFiberRan = true;
+		// returning resumes s_testMain through uc_link
+	}
+
+	void FiberSelfTest()
+	{
+		errno = 0;
+		const int rGet = getcontext(&s_testFiber);
+		const int eGet = errno;
+		WiiPadLog::Write(fmt::format("diag: fiber self-test: getcontext -> {} (errno {} {})", rGet, eGet, eGet ? strerror(eGet) : ""));
+		if (rGet != 0)
+		{
+			WiiPadLog::Write("diag: fiber self-test: ucontext is NOT available: Cemu's Fiber::Switch cannot switch, so the PPC scheduler cannot run guest threads");
+			return;
+		}
+		static uint8_t stack[256 * 1024] __attribute__((aligned(16)));
+		s_testFiber.uc_stack.ss_sp = stack;
+		s_testFiber.uc_stack.ss_size = sizeof(stack);
+		s_testFiber.uc_link = &s_testMain;
+		makecontext(&s_testFiber, (void (*)())TestFiberEntry, 0);
+		errno = 0;
+		const int rSwap = swapcontext(&s_testMain, &s_testFiber);
+		const int eSwap = errno;
+		WiiPadLog::Write(fmt::format("diag: fiber self-test: swapcontext -> {} (errno {} {}), fiber ran: {}", rSwap, eSwap, eSwap ? strerror(eSwap) : "",
+			s_testFiberRan.load() ? "yes" : "NO"));
+	}
+
 	// ---------------- monitor ----------------
 
 	struct Snapshot
@@ -342,6 +381,8 @@ namespace
 				WiiPadLog::Section(fmt::format("diag snapshot +{:.0f}s", t));
 				LogHostThreads(lastCpuSnapshot, nextSnapshot == 0 ? 0.0 : t - snapshotTimes[nextSnapshot - 1], true);
 				LogGuestThreads();
+				if (nextSnapshot == 0)
+					FiberSelfTest(); // after the first snapshot is written, in case the test itself faults
 				WiiPadLog::Section("diag snapshot end");
 				nextSnapshot++;
 			}
