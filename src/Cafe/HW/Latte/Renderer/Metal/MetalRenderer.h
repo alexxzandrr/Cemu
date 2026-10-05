@@ -269,8 +269,14 @@ public:
 
 	void SetShouldMaximizeConcurrentCompilation(bool shouldMaximizeConcurrentCompilation)
 	{
+#if BOOST_OS_IOS
+	    // MTLDevice.shouldMaximizeConcurrentCompilation is macOS-only (macOS 13.3+). On iOS/iPadOS the selector does
+	    // not exist and sending it raises NSInvalidArgumentException (uncaught on the GPU thread -> abort).
+	    (void)shouldMaximizeConcurrentCompilation;
+#else
 	    if (m_supportsMetal3)
 	        m_device->setShouldMaximizeConcurrentCompilation(shouldMaximizeConcurrentCompilation);
+#endif
 	}
 
 	bool IsCommandBufferActive() const

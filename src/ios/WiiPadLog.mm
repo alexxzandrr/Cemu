@@ -9,6 +9,7 @@
 #include <exception>
 #include <mutex>
 #include <atomic>
+#include <execinfo.h>
 #include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
@@ -22,6 +23,8 @@ namespace
 	std::string s_path;
 	std::string s_markerPath;
 	bool s_previousUnclean = false;
+	bool s_previousCrashLogsKept = false;
+	std::terminate_handler s_previousTerminate = nullptr;
 	std::atomic<const char*> s_stage{ nullptr };
 
 	constexpr int kFatalSignals[] = { SIGSEGV, SIGBUS, SIGILL, SIGFPE, SIGABRT, SIGTRAP };
@@ -116,7 +119,12 @@ namespace
 			SignalSafeWrite("\n!!! last stage: ");
 			SignalSafeWrite(stage);
 		}
-		SignalSafeWrite("\n!!! The app is crashing. See also log.txt and stdout.txt in this folder.\n");
+		SignalSafeWrite("\n!!! backtrace of the crashing thread:\n");
+		void* frames[64];
+		const int frameCount = backtrace(frames, 64);
+		if (s_fd >= 0)
+			backtrace_symbols_fd(frames, frameCount, s_fd); // documented not to call malloc
+		SignalSafeWrite("!!! The app is crashing. See also log.txt and stdout.txt in this folder.\n");
 		if (s_fd >= 0)
 			fsync(s_fd);
 
@@ -147,6 +155,10 @@ namespace
 			WiiPadLog::Write(std::string("    ") + (frame.UTF8String ?: ""));
 	}
 
+	// Logs what reached std::terminate (incl. Objective-C exceptions, which unwind like C++ exceptions on arm64),
+	// with a backtrace taken before anything unwinds, then chains to the previously installed handler.
+	// The Objective-C runtime installs its own terminate handler; chaining keeps its reporting
+	// (NSSetUncaughtExceptionHandler callback, "terminating due to uncaught exception" message) intact.
 	void TerminateHandler()
 	{
 		std::string text = "std::terminate called";
@@ -154,7 +166,14 @@ namespace
 		{
 			try
 			{
-				std::rethrow_exception(ep);
+				@try
+				{
+					std::rethrow_exception(ep);
+				}
+				@catch (NSException* e)
+				{
+					text += std::string(": uncaught Objective-C exception ") + (e.name.UTF8String ?: "?") + ": " + (e.reason.UTF8String ?: "?");
+				}
 			}
 			catch (const std::exception& e)
 			{
@@ -162,11 +181,39 @@ namespace
 			}
 			catch (...)
 			{
-				text += ": uncaught non-std C++ exception";
+				text += ": uncaught exception of unknown type";
 			}
 		}
+		else
+		{
+			text += " without an active exception";
+		}
 		WiiPadLog::Fatal(text);
+		WiiPadLog::Write("!!! backtrace at std::terminate (throwing frames are still on the stack):");
+		void* frames[64];
+		const int frameCount = backtrace(frames, 64);
+		if (s_fd >= 0)
+		{
+			backtrace_symbols_fd(frames, frameCount, s_fd);
+			fsync(s_fd);
+		}
+		if (s_previousTerminate)
+			s_previousTerminate();
 		abort();
+	}
+
+	bool FileContains(const std::string& path, const char* needle)
+	{
+		FILE* f = fopen(path.c_str(), "r");
+		if (!f)
+			return false;
+		std::string content;
+		char buf[4096];
+		size_t n;
+		while ((n = fread(buf, 1, sizeof(buf), f)) > 0)
+			content.append(buf, n);
+		fclose(f);
+		return content.find(needle) != std::string::npos;
 	}
 }
 
@@ -180,14 +227,25 @@ namespace WiiPadLog
 		s_path = documentsDir + "/WiiPad.log";
 		s_markerPath = documentsDir + "/.wiipad_session_running";
 
-		// keep the previous run's log next to the new one
-		std::string previous = documentsDir + "/WiiPad.previous.log";
-		rename(s_path.c_str(), previous.c_str());
-
-		s_fd = open(s_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_APPEND | O_CLOEXEC, 0644);
-
 		struct stat st{};
 		s_previousUnclean = stat(s_markerPath.c_str(), &st) == 0;
+
+		// keep the previous run's logs. If it crashed (its log has a FATAL line), keep the full set as *.crash.*
+		// so relaunching does not overwrite the evidence (stdout.txt holds Cemu's backtrace, log.txt is
+		// rewritten by Cemu on every start). Otherwise only keep the previous WiiPad.log.
+		if (s_previousUnclean && FileContains(s_path, "!!! FATAL"))
+		{
+			rename(s_path.c_str(), (documentsDir + "/WiiPad.crash.log").c_str());
+			rename((documentsDir + "/stdout.txt").c_str(), (documentsDir + "/stdout.crash.txt").c_str());
+			rename((documentsDir + "/log.txt").c_str(), (documentsDir + "/log.crash.txt").c_str());
+			s_previousCrashLogsKept = true;
+		}
+		else
+		{
+			rename(s_path.c_str(), (documentsDir + "/WiiPad.previous.log").c_str());
+		}
+
+		s_fd = open(s_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_APPEND | O_CLOEXEC, 0644);
 
 		// capture printf/std::cerr output (Cemu's crash handler prints its backtrace to stderr)
 		std::string stdoutPath = documentsDir + "/stdout.txt";
@@ -197,7 +255,7 @@ namespace WiiPadLog
 		setvbuf(stderr, nullptr, _IONBF, 0);
 
 		NSSetUncaughtExceptionHandler(&UncaughtObjCException);
-		std::set_terminate(&TerminateHandler);
+		s_previousTerminate = std::set_terminate(&TerminateHandler);
 	}
 
 	void Write(std::string_view line)
@@ -250,6 +308,11 @@ namespace WiiPadLog
 	bool PreviousSessionEndedUncleanly()
 	{
 		return s_previousUnclean;
+	}
+
+	bool PreviousSessionCrashLogsKept()
+	{
+		return s_previousCrashLogsKept;
 	}
 
 	void MarkSessionRunning()

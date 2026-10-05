@@ -380,8 +380,10 @@ namespace
 		ToStd(UIDevice.currentDevice.systemName), ToStd(UIDevice.currentDevice.systemVersion)));
 	WiiPadLog::Write(fmt::format("cpu cores {}, physical RAM {}", (int)NSProcessInfo.processInfo.activeProcessorCount, MB(SysctlU64("hw.memsize"))));
 	LogMemoryState("startup");
-	if (WiiPadLog::PreviousSessionEndedUncleanly())
-		WiiPadLog::Write("NOTE: the previous session did not shut down cleanly (crash or app killed). Its log is WiiPad.previous.log");
+	if (WiiPadLog::PreviousSessionCrashLogsKept())
+		WiiPadLog::Write("NOTE: the previous session crashed. Its logs were kept as WiiPad.crash.log, stdout.crash.txt and log.crash.txt");
+	else if (WiiPadLog::PreviousSessionEndedUncleanly())
+		WiiPadLog::Write("NOTE: the previous session did not shut down cleanly (app closed or killed). Its log is WiiPad.previous.log");
 	WiiPadLog::MarkSessionRunning();
 	return self;
 }

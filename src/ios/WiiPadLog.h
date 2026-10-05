@@ -32,6 +32,8 @@ namespace WiiPadLog
 
 	// Session marker: lets the next launch detect a crash or forced kill of this one.
 	bool PreviousSessionEndedUncleanly();
+	// The previous session crashed and its logs were kept as WiiPad.crash.log, stdout.crash.txt, log.crash.txt.
+	bool PreviousSessionCrashLogsKept();
 	void MarkSessionRunning();
 	void MarkSessionEndedCleanly();
 }
