@@ -7,9 +7,9 @@ name: iPadOS build
 # Failing steps publish error excerpts as annotations (readable via the API without log downloads).
 on:
   push:
-    branches: [ ipados ]
+    branches: [ ipados, phase2 ]
   pull_request:
-    branches: [ ipados ]
+    branches: [ ipados, phase2 ]
   workflow_dispatch:
     inputs:
       runner:
