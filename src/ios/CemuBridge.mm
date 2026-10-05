@@ -2,6 +2,7 @@
 
 #include "WiiPadLog.h"
 #include "WiiPadTouchController.h"
+#include "WiiPadDiagnostics.h"
 #include "audio/IAudioAPI.h"
 
 #include "Cafe/CafeSystem.h"
@@ -707,6 +708,7 @@ namespace
 		CafeSystem::LaunchForegroundTitle();
 		_titleLaunched = YES;
 		StartProgressMonitor();
+		WiiPadDiag::StartMonitor(); // diagnostic-only: emulation/GPU/audio/input heartbeat and thread snapshots
 		LogMemoryState("after LaunchForegroundTitle");
 		return [NSString stringWithUTF8String:CafeSystem::GetForegroundTitleName().c_str()];
 	}

@@ -76,3 +76,21 @@ Logged on change only (no per-frame lines); the audio thread itself never logs.
 - Audio does not resume after an interruption (phone call, Siri); restart WiiPad.
 - Landscape only for the controls (they sit beside the 480×270 game view).
 - Touch maps to whichever screen the game view shows; use "Pad view" so touches line up with the GamePad screen.
+
+## Investigation: title stays on the loading screen (471c9db)
+
+Device run: `PPC scheduler started`, then nothing: no `GX2Init`, no frames, no `VPADRead`, no audio samples
+(5-minute monitor: `GPU init yes, GX2Init calls 0, frames 0`). The image that stays on screen is Cemu's own
+shader-cache loading screen (`bootTvTex.tga` / `bootDRCTex.tga` from the title's `meta`, drawn by the GPU thread),
+not game output: the game's code has not reached `GX2Init()`.
+
+Diagnostic-only instrumentation (`src/ios/WiiPadDiagnostics.h/.mm`, lines prefixed `diag:`):
+
+- heartbeat every 2 s (first 30 s), then every 10 s: CPU time used by the `OSSched[core=0]` (PPC interpreter) and
+  `LatteThread` host threads with their run state; `sched events` = `AXOut_update` calls from the PPC scheduler's idle
+  loop (`__OSCheckSystemEvents`); `VPADRead` count; `GX2Init` / flip counters; audio `Play`, `FeedBlock` and render
+  callback counts with last-hit times
+- snapshots at +3/15/60/180/600 s: every host thread (name, run state, CPU time, BUSY if > 50 % of a core) with a
+  frame-pointer backtrace of the emulation, GPU, input and audio threads (and any busy thread); every emulated PPC
+  thread (state, priority, suspend count, waited-on mutex/queue, saved PC/LR with RPL symbol), copied under
+  `__OSTryLockScheduler` (never a blocking lock)

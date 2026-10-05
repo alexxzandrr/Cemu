@@ -24,6 +24,8 @@ add_library(WiiPadPlatform STATIC
 	WiiPadLog.mm
 	WiiPadTouchController.h
 	WiiPadTouchController.cpp
+	WiiPadDiagnostics.h
+	WiiPadDiagnostics.mm
 )
 
 cemu_use_precompiled_header(WiiPadPlatform)

@@ -1,5 +1,6 @@
 #include "IOSAudioAPI.h"
 #include "WiiPadLog.h"
+#include "WiiPadDiagnostics.h"
 
 #import <AVFAudio/AVFAudio.h>
 #import <AudioToolbox/AudioToolbox.h>
@@ -131,12 +132,14 @@ IOSAudioAPI::~IOSAudioAPI()
 
 bool IOSAudioAPI::NeedAdditionalBlocks() const
 {
+	WiiPadDiag::schedulerEvents.Hit(); // called by AXOut_update from the PPC scheduler's idle loop
 	std::shared_lock lock(m_mutex);
 	return m_buffer.size() < GetAudioDelay() * m_bytesPerBlock;
 }
 
 bool IOSAudioAPI::FeedBlock(sint16* data)
 {
+	WiiPadDiag::audioFeed.Hit();
 	// diagnostics are logged here (emulation thread), never on the realtime audio thread
 	if (!m_loggedFirstFeed)
 	{
@@ -166,6 +169,7 @@ bool IOSAudioAPI::FeedBlock(sint16* data)
 
 void IOSAudioAPI::Render(uint8* output, size_t bytes)
 {
+	WiiPadDiag::audioRender.Hit();
 	std::unique_lock lock(m_mutex);
 	const size_t copied = std::min(m_buffer.size(), bytes);
 	if (copied > 0)
@@ -182,6 +186,7 @@ void IOSAudioAPI::Render(uint8* output, size_t bytes)
 	}
 	if (copied == 0)
 		return;
+	WiiPadDiag::audioRenderData.Hit();
 	m_renderedSamples.store(true, std::memory_order_relaxed);
 
 	// volume (config tv_volume, 0..100), as CubebAPI does through cubeb_stream_set_volume
@@ -199,6 +204,7 @@ bool IOSAudioAPI::Play()
 {
 	if (m_isPlaying)
 		return true;
+	WiiPadDiag::audioPlay.Hit();
 	const OSStatus status = AudioOutputUnitStart((AudioComponentInstance)m_unit);
 	if (status != noErr)
 	{

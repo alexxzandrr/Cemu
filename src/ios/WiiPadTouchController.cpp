@@ -1,5 +1,6 @@
 #include "WiiPadTouchController.h"
 #include "WiiPadLog.h"
+#include "WiiPadDiagnostics.h"
 
 #include "input/InputManager.h"
 #include "input/api/Controller.h"
@@ -56,8 +57,11 @@ namespace
 			result.axis = { s_stick[0][0].load(std::memory_order_relaxed), s_stick[0][1].load(std::memory_order_relaxed) };
 			result.rotation = { s_stick[1][0].load(std::memory_order_relaxed), s_stick[1][1].load(std::memory_order_relaxed) };
 
-			if (m_logging)
+			if (m_logging) // false during calibrate(): only count reads made by the game's VPADRead
+			{
+				WiiPadDiag::vpadRead.Hit();
 				LogChanges(mask, result);
+			}
 			return result;
 		}
 
