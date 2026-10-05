@@ -1,6 +1,6 @@
 #include "cpu_features.h"
 
-#if BOOST_OS_MACOS
+#if BOOST_OS_MACOS || BOOST_OS_IOS
 #include <sys/types.h>
 #include <sys/sysctl.h>
 #endif
@@ -35,7 +35,7 @@ inline void cpuidex(int cpuInfo[4], int functionId, int subFunctionId) {
 
 CPUFeaturesImpl::CPUFeaturesImpl()
 {
-#if BOOST_OS_MACOS
+#if BOOST_OS_MACOS || BOOST_OS_IOS
 	std::string cpuName;
 	size_t size = 0;
 

@@ -4,7 +4,7 @@
 #if BOOST_OS_WINDOWS
 #include <boost/asio/detail/socket_option.hpp>
 #include <winsock2.h>
-#elif BOOST_OS_LINUX || BOOST_OS_MACOS
+#elif BOOST_OS_LINUX || BOOST_OS_MACOS || BOOST_OS_IOS
 #include <sys/time.h>
 #include <sys/socket.h>
 #endif

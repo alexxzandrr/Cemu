@@ -1,0 +1,57 @@
+# XcodeGen spec for WiiPad (Cemu for iPadOS).
+# The .xcodeproj is generated in CI (`xcodegen generate`) and is not committed.
+#
+# The app links one static library, libCemuCore.a, built by CMake from the repo root
+# (cmake -DCMAKE_SYSTEM_NAME=iOS ... --target CemuCore, see .github/workflows/ios-build.yml)
+# into build-ios/CemuCore/. Swift only sees CemuBridge.h (src/ios).
+name: WiiPad
+
+options:
+  bundleIdPrefix: io.github.wiipad
+  deploymentTarget:
+    iOS: "16.0"          # must match dependencies/vcpkg_ios/triplets/arm64-ios-wiipad.cmake and the CMake configure
+  createIntermediateGroups: true
+
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    CLANG_CXX_LANGUAGE_STANDARD: c++20
+    ENABLE_BITCODE: NO
+
+targets:
+  WiiPad:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+        excludes:
+          - Info.plist   # referenced via INFOPLIST_FILE, must not be copied as a resource
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.github.wiipad.WiiPad
+        PRODUCT_NAME: WiiPad
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "2"
+        TARGETED_DEVICE_FAMILY: "2"           # iPad only
+        ARCHS: arm64
+        SWIFT_OBJC_BRIDGING_HEADER: Sources/WiiPad-Bridging-Header.h
+        GENERATE_INFOPLIST_FILE: NO
+        INFOPLIST_FILE: Sources/Info.plist
+        HEADER_SEARCH_PATHS: "$(SRCROOT)/../../src/ios"
+        LIBRARY_SEARCH_PATHS: "$(SRCROOT)/../../build-ios/CemuCore"
+        OTHER_LDFLAGS:
+          - "-lCemuCore"
+          - "-lc++"
+          - "-framework Metal"
+          - "-framework QuartzCore"
+          - "-framework UIKit"
+          - "-framework Foundation"
+          - "-framework CoreFoundation"
+          - "-framework Security"
+          - "-framework SystemConfiguration"
+        DEAD_CODE_STRIPPING: YES
+        # Unsigned CI build; the sideloading tool signs on the Windows PC.
+        CODE_SIGNING_ALLOWED: NO
+        CODE_SIGNING_REQUIRED: NO
+        CODE_SIGN_IDENTITY: ""
+        DEVELOPMENT_TEAM: ""

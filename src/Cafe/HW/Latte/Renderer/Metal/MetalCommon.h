@@ -18,7 +18,13 @@ struct MetalPixelFormatSupport
         m_supportsR8Unorm_sRGB = device->supportsFamily(MTL::GPUFamilyApple1);
         m_supportsRG8Unorm_sRGB = device->supportsFamily(MTL::GPUFamilyApple1);
         m_supportsPacked16BitFormats = device->supportsFamily(MTL::GPUFamilyApple1);
+#if BOOST_OS_IOS
+        // depth24Stencil8PixelFormatSupported is a macOS-only selector (unrecognized selector on iOS).
+        // No Apple-family GPU supports Depth24Unorm_Stencil8; the existing Depth32Float_Stencil8 fallback is used.
+        m_supportsDepth24Unorm_Stencil8 = false;
+#else
         m_supportsDepth24Unorm_Stencil8 = device->depth24Stencil8PixelFormatSupported();
+#endif
 	}
 };
 

@@ -69,7 +69,7 @@
 
 #if BOOST_OS_LINUX
 #include <sys/sysinfo.h>
-#elif BOOST_OS_MACOS || BOOST_OS_BSD
+#elif BOOST_OS_MACOS || BOOST_OS_IOS || BOOST_OS_BSD
 #include <sys/types.h>
 #include <sys/sysctl.h>
 #endif
@@ -480,7 +480,7 @@ namespace CafeSystem
 		struct sysinfo info {};
 		sysinfo(&info);
 		cemuLog_log(LogType::Force, "RAM: {}MB", ((static_cast<uint64_t>(info.totalram) * info.mem_unit) / 1024LL / 1024LL));
-		#elif BOOST_OS_MACOS
+		#elif BOOST_OS_MACOS || BOOST_OS_IOS
 		int64_t totalRam;
 		size_t size = sizeof(totalRam);
 		int result = sysctlbyname("hw.memsize", &totalRam, &size, NULL, 0);
@@ -560,7 +560,8 @@ namespace CafeSystem
 		}
 		else
 			platform = "Linux";
-		#elif BOOST_OS_MACOS
+		#elif BOOST_OS_MACOS || BOOST_OS_IOS
+		const char* osName = BOOST_OS_IOS ? "iPadOS" : "macOS";
 		char productVersion[256]{};
 		size_t productVersionSize = sizeof(productVersion);
 		const int productVersionResult = sysctlbyname("kern.osproductversion", productVersion, &productVersionSize, nullptr, 0);
@@ -570,11 +571,11 @@ namespace CafeSystem
 		const int buildVersionResult = sysctlbyname("kern.osversion", buildVersion, &buildVersionSize, nullptr, 0);
 
 		if (productVersionResult == 0 && buildVersionResult == 0)
-			buffer = fmt::format("macOS {} ({})", productVersion, buildVersion);
+			buffer = fmt::format("{} {} ({})", osName, productVersion, buildVersion);
 		else if (productVersionResult == 0)
-			buffer = fmt::format("macOS {}", productVersion);
+			buffer = fmt::format("{} {}", osName, productVersion);
 		else
-			buffer = "macOS";
+			buffer = osName;
 
 		platform = buffer.c_str();
 		

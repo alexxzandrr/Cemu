@@ -40,6 +40,8 @@ std::vector<MetalRenderer::DeviceInfo> MetalRenderer::GetDevices()
 {
     NS_STACK_SCOPED auto devices = MTL::CopyAllDevices();
     std::vector<MetalRenderer::DeviceInfo> result;
+    if (!devices) // MTLCopyAllDevices is macOS-only; metal-cpp returns nullptr on iOS
+        return result;
     result.reserve(devices->count());
     for (uint32 i = 0; i < devices->count(); i++)
     {
@@ -129,7 +131,7 @@ MetalRenderer::MetalRenderer() : Renderer(RendererAPI::Metal)
     if (hasDeviceSet)
     {
         NS_STACK_SCOPED auto devices = MTL::CopyAllDevices();
-        for (uint32 i = 0; i < devices->count(); i++)
+        for (uint32 i = 0; devices && i < devices->count(); i++)
         {
             MTL::Device* device = static_cast<MTL::Device*>(devices->object(i));
             if (device->registryID() == config.mtl_graphic_device_uuid)

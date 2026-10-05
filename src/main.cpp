@@ -38,7 +38,7 @@
 #if BOOST_OS_LINUX
 #define _putenv(__s) putenv((char*)(__s))
 #include <sys/sysinfo.h>
-#elif BOOST_OS_MACOS || BOOST_OS_BSD
+#elif BOOST_OS_MACOS || BOOST_OS_IOS || BOOST_OS_BSD
 #define _putenv(__s) putenv((char*)(__s))
 #include <sys/types.h>
 #include <sys/sysctl.h>
@@ -112,6 +112,16 @@ void WindowsInitCwd()
 	#endif
 }
 
+// Optional observer for init progress. Unused (null) on desktop; the iPadOS bridge
+// sets it to write each stage to its crash-safe log file.
+void (*g_cemuCommonInitStageCallback)(const char* stage, bool begin) = nullptr;
+
+static void CemuCommonInitStage(const char* stage, bool begin)
+{
+	if (g_cemuCommonInitStageCallback)
+		g_cemuCommonInitStageCallback(stage, begin);
+}
+
 void CemuCommonInit()
 {
 	reconfigureGLDrivers();
@@ -120,23 +130,36 @@ void CemuCommonInit()
 	AES128_init();
 	// init PPC timer
 	// call this as early as possible because it measures frequency of RDTSC using an asynchronous thread over 3 seconds
+	CemuCommonInitStage("PPC timer", true);
 	PPCTimer_init();
+	CemuCommonInitStage("PPC timer", false);
 
 	WindowsInitCwd();
+	CemuCommonInitStage("exception handler", true);
     ExceptionHandler_Init();
+	CemuCommonInitStage("exception handler", false);
 	// read config
+	CemuCommonInitStage("config", true);
 	GetConfigHandle().Load();
 	if (NetworkConfig::XMLExists())
 		n_config.Load();
+	CemuCommonInitStage("config", false);
 	// parallelize expensive init code
+	CemuCommonInitStage("audio + graphic packs (async)", true);
 	std::future<int> futureInitAudioAPI = std::async(std::launch::async, []{ IAudioAPI::InitializeStatic(); IAudioInputAPI::InitializeStatic(); return 0; });
 	std::future<int> futureInitGraphicPacks = std::async(std::launch::async, []{ GraphicPack2::LoadAll(); return 0; });
+	CemuCommonInitStage("input", true);
 	InputManager::instance().load();
+	CemuCommonInitStage("input", false);
 	futureInitAudioAPI.wait();
 	futureInitGraphicPacks.wait();
+	CemuCommonInitStage("audio + graphic packs (async)", false);
 	// init Cafe system
+	CemuCommonInitStage("CafeSystem", true);
 	CafeSystem::Initialize();
+	CemuCommonInitStage("CafeSystem", false);
 	// init title list
+	CemuCommonInitStage("title list", true);
 	CafeTitleList::Initialize(ActiveSettings::GetUserDataPath("title_list_cache.xml"));
 	for (auto& it : GetConfig().game_paths)
 		CafeTitleList::AddScanPath(_utf8ToPath(it));
@@ -144,13 +167,16 @@ void CemuCommonInit()
 	if (!mlcPath.empty())
 		CafeTitleList::SetMLCPath(mlcPath);
 	CafeTitleList::Refresh();
+	CemuCommonInitStage("title list", false);
 	// init save list
+	CemuCommonInitStage("save list", true);
 	CafeSaveList::Initialize();
 	if (!mlcPath.empty())
 	{
 		CafeSaveList::SetMLCPath(mlcPath);
 		CafeSaveList::Refresh();
 	}
+	CemuCommonInitStage("save list", false);
 }
 
 void mainEmulatorLLE();
@@ -246,6 +272,10 @@ int main(int argc, char* argv[])
 	WindowSystem::Create();
 	return 0;
 }
+
+#elif BOOST_OS_IOS
+
+// iPadOS: the entry point is the SwiftUI app, which calls CemuCommonInit() through src/ios/CemuBridge.mm
 
 #else
 

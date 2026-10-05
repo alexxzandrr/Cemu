@@ -12,6 +12,7 @@ namespace WindowSystem
 			Wayland,
 			Cocoa,
 			Windows,
+			UIKit, // iPadOS: surface is a UIView*
 		} backend;
 		void* display = nullptr;
 		void* surface = nullptr;

@@ -548,7 +548,7 @@ if (ENABLE_VULKAN)
   )
 endif()
 
-if(APPLE)
+if(APPLE AND NOT CEMU_IOS) # AppKit; iOS uses src/ios/MetalLayerUIKit.mm
 	target_sources(CemuCafe PRIVATE
 	    HW/Latte/Renderer/MetalView.mm
 	    HW/Latte/Renderer/MetalView.h
@@ -581,7 +581,6 @@ if(ENABLE_METAL)
         HW/Latte/Renderer/Metal/MetalDepthStencilCache.cpp
         HW/Latte/Renderer/Metal/MetalDepthStencilCache.h
         HW/Latte/Renderer/Metal/MetalLayer.h
-        HW/Latte/Renderer/Metal/MetalLayer.mm
         HW/Latte/Renderer/Metal/MetalLayerHandle.cpp
         HW/Latte/Renderer/Metal/MetalLayerHandle.h
         HW/Latte/Renderer/Metal/MetalMemoryManager.cpp
@@ -611,6 +610,10 @@ if(ENABLE_METAL)
         HW/Latte/LegacyShaderDecompiler/LatteDecompilerEmitMSL.cpp
         HW/Latte/LegacyShaderDecompiler/LatteDecompilerEmitMSLHeader.hpp
     )
+
+    if (NOT CEMU_IOS) # AppKit implementation of CreateMetalLayer(); iOS uses src/ios/MetalLayerUIKit.mm
+        target_sources(CemuCafe PRIVATE HW/Latte/Renderer/Metal/MetalLayer.mm)
+    endif()
 
     target_link_libraries(CemuCafe PRIVATE
         "-framework Metal"
@@ -655,10 +658,13 @@ target_link_libraries(CemuCafe PRIVATE
   CURL::libcurl
   ih264d
   zstd::zstd
-  ${glslang_target}
   PUBLIC
   OpenSSL::SSL
 )
+
+if (NOT CEMU_IOS OR ENABLE_VULKAN) # glslang is only used by the Vulkan backend
+  target_link_libraries(CemuCafe PRIVATE ${glslang_target})
+endif()
 
 if (ENABLE_WAYLAND)
 	# PUBLIC because wayland-client.h is included in VulkanAPI.h

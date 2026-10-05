@@ -66,6 +66,11 @@ bool ActiveSettings::DisplayDRCEnabled()
 
 CPUMode ActiveSettings::GetCPUMode()
 {
+#if BOOST_OS_IOS
+	// iPadOS: no JIT yet (executable memory needs a debugger-assisted setup, see docs/ipados).
+	// Always use the interpreter, even if a game profile requests the recompiler.
+	return CPUMode::SinglecoreInterpreter;
+#endif
 	auto mode = g_current_game_profile->GetCPUMode().value_or(CPUMode::Auto);
 
 	if (mode == CPUMode::Auto)

@@ -57,6 +57,14 @@ endif()
 
 project(Cemu VERSION 2.0.0)
 
+# iPadOS (WiiPad) build: configured with -DCMAKE_SYSTEM_NAME=iOS. Produces the CemuCore static library
+# from src/ios instead of the desktop executable. See docs/ipados/.
+if (CMAKE_SYSTEM_NAME STREQUAL "iOS")
+	set(CEMU_IOS ON)
+else()
+	set(CEMU_IOS OFF)
+endif()
+
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
 set(CMAKE_CXX_STANDARD 20)
@@ -73,8 +81,11 @@ add_definitions(-DEMULATOR_VERSION_PATCH=${EMULATOR_VERSION_PATCH})
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 # enable link time optimization for release builds
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
-set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
+# (not for iOS: CemuCore is linked into the app by Xcode; LTO is revisited in the performance phase)
+if (NOT CEMU_IOS)
+	set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+	set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELWITHDEBINFO ON)
+endif()
 
 if (MSVC)
 	set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT CemuBin)
@@ -99,7 +110,9 @@ endif()
 
 if (APPLE)
     enable_language(OBJC OBJCXX)
-    set(CMAKE_OSX_DEPLOYMENT_TARGET "13.4")
+    if (NOT CEMU_IOS) # iOS deployment target is passed on the command line
+        set(CMAKE_OSX_DEPLOYMENT_TARGET "13.4")
+    endif()
 endif()
 
 if (UNIX AND NOT APPLE)
@@ -155,7 +168,9 @@ find_package(pugixml REQUIRED)
 find_package(RapidJSON REQUIRED)
 find_package(Boost COMPONENTS program_options filesystem nowide REQUIRED)
 find_package(libzip REQUIRED)
-find_package(glslang REQUIRED)
+if (NOT CEMU_IOS OR ENABLE_VULKAN) # glslang is only used by the Vulkan backend
+	find_package(glslang REQUIRED)
+endif()
 find_package(ZLIB REQUIRED)
 find_package(zstd MODULE REQUIRED) # MODULE so that zstd::zstd is available
 find_package(OpenSSL COMPONENTS Crypto SSL REQUIRED)

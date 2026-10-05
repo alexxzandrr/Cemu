@@ -64,6 +64,12 @@ add_subdirectory(util)
 add_subdirectory(imgui)
 add_subdirectory(resource)
 
+# iPadOS: no desktop executable. src/ios builds the platform layer + bridge and merges everything into libCemuCore.a
+if(CEMU_IOS)
+	add_subdirectory(ios)
+	return()
+endif()
+
 add_executable(CemuBin
 	main.cpp
 	mainLLE.cpp

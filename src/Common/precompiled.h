@@ -182,7 +182,7 @@ inline sint16 _swapEndianS16(sint16 v)
 #else
 inline uint64 _swapEndianU64(uint64 v)
 {
-#if BOOST_OS_MACOS
+#if BOOST_OS_MACOS || BOOST_OS_IOS
     return OSSwapInt64(v);
 #elif BOOST_OS_BSD
 #ifdef __OpenBSD__
@@ -197,7 +197,7 @@ inline uint64 _swapEndianU64(uint64 v)
 
 inline uint32 _swapEndianU32(uint32 v)
 {
-#if BOOST_OS_MACOS
+#if BOOST_OS_MACOS || BOOST_OS_IOS
     return OSSwapInt32(v);
 #elif BOOST_OS_BSD
 #ifdef __OpenBSD__
@@ -212,7 +212,7 @@ inline uint32 _swapEndianU32(uint32 v)
 
 inline sint32 _swapEndianS32(sint32 v)
 {
-#if BOOST_OS_MACOS
+#if BOOST_OS_MACOS || BOOST_OS_IOS
     return (sint32)OSSwapInt32((uint32)v);
 #elif BOOST_OS_BSD
 #ifdef __OpenBSD__
@@ -508,7 +508,7 @@ bool match_any_of(T1&& value, Types&&... others)
 	clock_gettime(CLOCK_MONOTONIC_RAW, &tp);
 	return std::chrono::steady_clock::time_point(
 		std::chrono::seconds(tp.tv_sec) + std::chrono::nanoseconds(tp.tv_nsec));
-#elif BOOST_OS_MACOS
+#elif BOOST_OS_MACOS || BOOST_OS_IOS
 	return std::chrono::steady_clock::time_point(
 		std::chrono::nanoseconds(clock_gettime_nsec_np(CLOCK_MONOTONIC_RAW)));
 #elif BOOST_OS_BSD

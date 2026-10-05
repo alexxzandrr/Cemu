@@ -1,128 +1,203 @@
 name: iPadOS build
 
-# Phase 1A: build the minimal CemuIOS app shell as an unsigned arm64 .ipa.
-# Runs only when iPadOS files change, so upstream Cemu changes don't trigger it.
+# WiiPad (Cemu for iPadOS):
+#   1. vcpkg builds the dependencies for arm64-ios (cached between runs, even failed ones)
+#   2. CMake builds the Cemu core for iOS and merges everything into libCemuCore.a
+#   3. Xcode links the SwiftUI app against it -> unsigned WiiPad .ipa artifact
+# Failing steps publish error excerpts as annotations (readable via the API without log downloads).
 on:
   push:
-    paths:
-      - "app/**"
-      - "src/ios/**"
-      - ".github/workflows/ios-build.yml"
+    branches: [ ipados ]
   pull_request:
-    paths:
-      - "app/**"
-      - "src/ios/**"
-      - ".github/workflows/ios-build.yml"
+    branches: [ ipados ]
   workflow_dispatch:
     inputs:
-      try_xcode27:
-        description: "Also build on the Xcode 27 preview runner (may queue or be unstable)"
-        type: boolean
-        default: false
+      runner:
+        description: "Runner image (xcode-27 is a preview image with an iOS 27 SDK and may queue)"
+        type: choice
+        options: [ macos-26, xcode-27 ]
+        default: macos-26
 
 concurrency:
   group: ios-build-${{ github.ref }}
   cancel-in-progress: true
 
-jobs:
-  matrix:
-    name: Choose runners
-    runs-on: ubuntu-latest
-    outputs:
-      include: ${{ steps.pick.outputs.include }}
-    steps:
-      - id: pick
-        env:
-          TRY_XCODE27: ${{ github.event_name == 'workflow_dispatch' && inputs.try_xcode27 }}
-        run: |
-          # macos-26: stable, generally available Apple Silicon runner (free for public repos).
-          # xcode-27: Xcode 27 / iOS 27 SDK preview image. Opt-in only: preview runners can queue for a long time.
-          stable='{"label":"macos-26","runner":"macos-26","experimental":false}'
-          preview='{"label":"xcode-27","runner":"xcode-27","experimental":true}'
-          if [ "$TRY_XCODE27" = "true" ]; then list="[$stable,$preview]"; else list="[$stable]"; fi
-          echo "include=$list" >> "$GITHUB_OUTPUT"
+env:
+  IOS_DEPLOYMENT_TARGET: "16.0"   # keep in sync with app/WiiPad/project.yml and the vcpkg triplet
+  VCPKG_TRIPLET: arm64-ios-wiipad
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-binary-cache
+  LOG_DIR: ${{ github.workspace }}/ci-logs
 
+jobs:
   build:
-    name: Build (${{ matrix.label }})
-    needs: matrix
-    strategy:
-      fail-fast: false
-      matrix:
-        include: ${{ fromJSON(needs.matrix.outputs.include) }}
-    runs-on: ${{ matrix.runner }}
-    continue-on-error: ${{ matrix.experimental }}
-    timeout-minutes: 30
+    name: Build WiiPad (${{ inputs.runner || 'macos-26' }})
+    runs-on: ${{ inputs.runner || 'macos-26' }}
+    timeout-minutes: 150
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
-          submodules: false   # Cemu's submodules are not needed until the core is introduced
+          submodules: false
 
-      - name: Select Xcode (runner default) and print environment
+      - name: Checkout submodules needed for iOS
         run: |
           set -euo pipefail
-          echo "== Installed Xcodes ==";       ls -d /Applications/Xcode*.app || true
-          echo "== Selected ==";               xcode-select -p
-          echo "== macOS ==";                  sw_vers
-          echo "== Architecture ==";           uname -m
-          echo "== Xcode ==";                  xcodebuild -version
-          echo "== iPhoneOS SDK ==";           xcrun --sdk iphoneos --show-sdk-version
-          echo "                   ";          xcrun --sdk iphoneos --show-sdk-path
-          echo "== All SDKs ==";               xcodebuild -showsdks
-          echo "== Swift ==";                  xcrun swift --version
-          echo "== clang ==";                  xcrun clang --version
+          # vcpkg needs full history for the manifest baseline; the others can be shallow.
+          # Not needed on iOS: cubeb (audio disabled), Vulkan-Headers (Vulkan disabled).
+          git submodule update --init dependencies/vcpkg
+          git submodule update --init --depth 1 dependencies/ZArchive dependencies/imgui dependencies/metal-cpp dependencies/xbyak_aarch64
+          git submodule status
+
+      - name: Print environment
+        id: env
+        run: |
+          set -euo pipefail
+          mkdir -p "$LOG_DIR" "$VCPKG_DEFAULT_BINARY_CACHE"
+          echo "== macOS ==";         sw_vers
+          echo "== Architecture =="; uname -m
+          echo "== Xcode ==";        xcode-select -p; xcodebuild -version
+          echo "== iPhoneOS SDK =="; xcrun --sdk iphoneos --show-sdk-version; xcrun --sdk iphoneos --show-sdk-path
+          echo "== clang ==";        xcrun clang --version
+          echo "== Swift ==";        xcrun swift --version
+          echo "== CPUs ==";         sysctl -n hw.ncpu
+          echo "xcode=$(xcodebuild -version | head -1 | tr ' ' '-')" >> "$GITHUB_OUTPUT"
+          echo "vcpkg_rev=$(git -C dependencies/vcpkg rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup CMake (same version as upstream Cemu CI)
+        uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.29.0'
+
+      - name: Bootstrap vcpkg
+        run: |
+          set -euo pipefail
+          cmake --version; ninja --version
+          bash ./dependencies/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+
+      - name: Restore vcpkg binary cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-ios-${{ steps.env.outputs.xcode }}-${{ steps.env.outputs.vcpkg_rev }}-${{ hashFiles('dependencies/vcpkg_ios/**') }}-${{ github.run_id }}
+          restore-keys: |
+            vcpkg-ios-${{ steps.env.outputs.xcode }}-${{ steps.env.outputs.vcpkg_rev }}-${{ hashFiles('dependencies/vcpkg_ios/**') }}-
+            vcpkg-ios-${{ steps.env.outputs.xcode }}-${{ steps.env.outputs.vcpkg_rev }}-
+
+      - name: Configure CemuCore for iOS (installs vcpkg dependencies)
+        id: configure
+        run: |
+          set -euo pipefail
+          cmake -S . -B build-ios -G Ninja \
+            -DCMAKE_SYSTEM_NAME=iOS \
+            -DCMAKE_OSX_SYSROOT=iphoneos \
+            -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DVCPKG_TARGET_TRIPLET="$VCPKG_TRIPLET" \
+            -DVCPKG_OVERLAY_TRIPLETS="$GITHUB_WORKSPACE/dependencies/vcpkg_ios/triplets" \
+            -DVCPKG_MANIFEST_DIR="$GITHUB_WORKSPACE/dependencies/vcpkg_ios" \
+            -DVCPKG_INSTALL_OPTIONS="--clean-after-build" \
+            -DENABLE_WXWIDGETS=OFF \
+            -DENABLE_OPENGL=OFF \
+            -DENABLE_VULKAN=OFF \
+            -DENABLE_METAL=ON \
+            -DENABLE_DISCORD_RPC=OFF \
+            -DENABLE_HIDAPI=OFF \
+            -DENABLE_SDL=OFF \
+            -DENABLE_LIBUSB=OFF \
+            -DENABLE_CUBEB=OFF \
+            2>&1 | tee "$LOG_DIR/cmake-configure.log"
+
+      - name: Save vcpkg binary cache
+        if: always() && steps.configure.outcome != 'skipped'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: vcpkg-ios-${{ steps.env.outputs.xcode }}-${{ steps.env.outputs.vcpkg_rev }}-${{ hashFiles('dependencies/vcpkg_ios/**') }}-${{ github.run_id }}
+
+      - name: Annotate configure errors
+        if: failure() && steps.configure.outcome == 'failure'
+        run: |
+          cp build-ios/vcpkg-manifest-install.log "$LOG_DIR/" 2>/dev/null || true
+          for f in dependencies/vcpkg/buildtrees/*/*.log; do [ -f "$f" ] && cp "$f" "$LOG_DIR/vcpkg-$(basename "$(dirname "$f")")-$(basename "$f")"; done 2>/dev/null || true
+          python3 .github/scripts/annotate_errors.py "configure" "$LOG_DIR/cmake-configure.log" "$LOG_DIR/vcpkg-manifest-install.log" "$LOG_DIR/vcpkg-*-err.log" "$LOG_DIR/vcpkg-*-out.log"
+
+      - name: Build CemuCore (libCemuCore.a)
+        id: core
+        run: |
+          set -euo pipefail
+          # -k 0: keep going so one run reports every compile error
+          cmake --build build-ios --target CemuCore -- -k 0 2>&1 | tee "$LOG_DIR/cemucore-build.log"
+          ls -l build-ios/CemuCore/
+          echo "== libCemuCore.a architectures =="; lipo -info build-ios/CemuCore/libCemuCore.a
+
+      - name: Annotate CemuCore errors
+        if: failure() && steps.core.outcome == 'failure'
+        run: python3 .github/scripts/annotate_errors.py "CemuCore" "$LOG_DIR/cemucore-build.log"
 
       - name: Generate Xcode project (XcodeGen)
-        working-directory: app/CemuIOS
+        working-directory: app/WiiPad
         run: |
           set -euo pipefail
           command -v xcodegen >/dev/null || brew install xcodegen
           xcodegen --version
           xcodegen generate
 
-      - name: Build unsigned app (Release, iphoneos, arm64)
-        working-directory: app/CemuIOS
+      - name: Build and link WiiPad app (unsigned, Release, arm64)
+        id: app
+        working-directory: app/WiiPad
         run: |
           set -euo pipefail
           xcodebuild \
-            -project CemuIOS.xcodeproj \
-            -scheme CemuIOS \
+            -project WiiPad.xcodeproj \
+            -scheme WiiPad \
             -configuration Release \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             ARCHS=arm64 \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            build | tee "$RUNNER_TEMP/xcodebuild.log"
+            build 2>&1 | tee "$LOG_DIR/xcodebuild.log"
+
+      - name: Annotate app build errors
+        if: failure() && steps.app.outcome == 'failure'
+        run: python3 .github/scripts/annotate_errors.py "WiiPad app" "$LOG_DIR/xcodebuild.log"
 
       - name: Package unsigned .ipa and verify
         run: |
           set -euo pipefail
-          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/CemuIOS.app"
+          APP="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/WiiPad.app"
           test -d "$APP"
-          echo "== Binary =="; file "$APP/CemuIOS"; lipo -info "$APP/CemuIOS"
-          echo "== Load commands (min OS / SDK) =="; otool -l "$APP/CemuIOS" | grep -A4 LC_BUILD_VERSION
-          echo "== Info.plist =="; plutil -p "$APP/Info.plist"
-          echo "== Signature (expected: none) =="; codesign -dv "$APP" 2>&1 || true
+          {
+            echo "== Binary =="; file "$APP/WiiPad"; lipo -info "$APP/WiiPad"
+            echo "== Size =="; du -sh "$APP"; ls -l "$APP/WiiPad"
+            echo "== Min OS / SDK =="; otool -l "$APP/WiiPad" | grep -A4 LC_BUILD_VERSION
+            echo "== Linked libraries =="; otool -L "$APP/WiiPad"
+            echo "== Info.plist =="; plutil -p "$APP/Info.plist"
+            echo "== Signature (expected: none) =="; codesign -dv "$APP" 2>&1 || true
+          } | tee "$LOG_DIR/ipa-verify.log"
+          # surface the key facts as notices (readable via the API)
+          echo "::notice title=WiiPad binary::$(lipo -info "$APP/WiiPad" | sed 's/.*: //'), $(du -sh "$APP" | cut -f1), minos $(otool -l "$APP/WiiPad" | awk '/minos/{print $2; exit}'), sdk $(otool -l "$APP/WiiPad" | awk '/ sdk /{print $2; exit}')"
+          echo "::notice title=Toolchain::$(xcodebuild -version | tr '\n' ' ') iOS SDK $(xcrun --sdk iphoneos --show-sdk-version)"
 
           OUT="$GITHUB_WORKSPACE/out"
           mkdir -p "$OUT/Payload"
           cp -R "$APP" "$OUT/Payload/"
-          (cd "$OUT" && zip -qry "CemuIOS-unsigned-${{ matrix.label }}.ipa" Payload)
+          (cd "$OUT" && zip -qry "WiiPad-unsigned.ipa" Payload)
           ls -l "$OUT"/*.ipa
 
       - name: Upload .ipa
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
-          name: CemuIOS-unsigned-${{ matrix.label }}-${{ github.sha }}
+          name: WiiPad-unsigned-${{ github.sha }}
           path: out/*.ipa
           if-no-files-found: error
 
-      - name: Upload build log
+      - name: Upload build logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
-          name: xcodebuild-log-${{ matrix.label }}-${{ github.sha }}
-          path: ${{ runner.temp }}/xcodebuild.log
+          name: build-logs-${{ github.sha }}
+          path: ci-logs/
           if-no-files-found: ignore
