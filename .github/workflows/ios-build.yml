@@ -158,17 +158,11 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/DerivedData" \
             ARCHS=arm64 \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            LD_GENERATE_MAP_FILE=YES LD_MAP_FILE_PATH="$LOG_DIR/WiiPad-LinkMap.txt" \
             build 2>&1 | tee "$LOG_DIR/xcodebuild.log"
 
       - name: Annotate app build errors
         if: failure() && steps.app.outcome == 'failure'
         run: python3 .github/scripts/annotate_errors.py "WiiPad app" "$LOG_DIR/xcodebuild.log"
-
-      - name: "Diagnostics: list pre-main initializers in the WiiPad binary"
-        if: steps.app.outcome == 'success'
-        continue-on-error: true
-        run: bash .github/scripts/list_initializers.sh "$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/WiiPad.app/WiiPad" "$LOG_DIR/WiiPad-LinkMap.txt" "$LOG_DIR/initializers.txt"
 
       - name: Package unsigned .ipa and verify
         run: |
