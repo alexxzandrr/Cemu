@@ -17,7 +17,7 @@ ERROR_RE = re.compile(
     r"Could not find|Could NOT find|No such file)",
     re.IGNORECASE,
 )
-CONTEXT_AFTER = 4
+CONTEXT_AFTER = 3
 MAX_CHARS = 3800          # per annotation, stay well below GitHub's limits
 MAX_ANNOTATIONS = 9       # 10 error annotations per step; keep one spare
 
@@ -26,7 +26,12 @@ def escape(text: str) -> str:
     return text.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
 
 
+NOISE_RE = re.compile(r"^(/\S+/(c\+\+|clang\+\+|clang|cc)\s|FAILED: |\[\d+/\d+\] |ninja: build stopped)")
+LOCATION_RE = re.compile(r"^(In file included from|\s+\d+ \|)")
+
+
 def collect(paths):
+    """One block per distinct error line (compiler errors repeat for every file including a header)."""
     blocks, seen = [], set()
     for path in paths:
         try:
@@ -34,17 +39,15 @@ def collect(paths):
                 lines = f.read().splitlines()
         except OSError:
             continue
-        i = 0
-        while i < len(lines):
-            if ERROR_RE.search(lines[i]):
-                block = lines[i:i + 1 + CONTEXT_AFTER]
-                key = lines[i].strip()
-                if key not in seen:
-                    seen.add(key)
-                    blocks.append(f"[{os.path.basename(path)}] " + "\n".join(block))
-                i += 1 + CONTEXT_AFTER
-            else:
-                i += 1
+        for i, line in enumerate(lines):
+            if NOISE_RE.search(line) or not ERROR_RE.search(line):
+                continue
+            key = line.strip()
+            if key in seen:
+                continue
+            seen.add(key)
+            context = [l for l in lines[i + 1:i + 1 + CONTEXT_AFTER] if not NOISE_RE.search(l)]
+            blocks.append(line + ("\n" + "\n".join(context) if context else ""))
     return blocks
 
 

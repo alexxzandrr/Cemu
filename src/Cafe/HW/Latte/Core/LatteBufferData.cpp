@@ -7,6 +7,15 @@
 #include "Cafe/GameProfile/GameProfile.h"
 
 #include "Cafe/HW/Latte/Core/LatteBufferCache.h"
+#ifndef ENABLE_VULKAN
+// stage bit indices used below; identical to VulkanRendererConst in VulkanRenderer.h (builds without Vulkan, e.g. iPadOS)
+namespace VulkanRendererConst
+{
+	static const inline int SHADER_STAGE_INDEX_VERTEX = static_cast<int>(LatteConst::ShaderType::Vertex);
+	static const inline int SHADER_STAGE_INDEX_FRAGMENT = static_cast<int>(LatteConst::ShaderType::Pixel);
+	static const inline int SHADER_STAGE_INDEX_GEOMETRY = static_cast<int>(LatteConst::ShaderType::Geometry);
+};
+#endif
 #ifdef ENABLE_VULKAN
 #include "Cafe/HW/Latte/Renderer/Vulkan/VulkanRenderer.h"
 #endif

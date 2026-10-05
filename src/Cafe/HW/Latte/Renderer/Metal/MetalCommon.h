@@ -113,6 +113,11 @@ inline bool FormatIsRenderable(Latte::E_GX2SURFFMT format)
 template <typename... T>
 inline bool executeCommand(fmt::format_string<T...> fmt, T&&... args) {
     std::string command = fmt::format(fmt, std::forward<T>(args)...);
+#if BOOST_OS_IOS
+    // system() is unavailable on iOS; callers (optional macOS shader cache tooling) treat this as a failure
+    cemuLog_log(LogType::Force, "command \"{}\" not supported on iOS", command);
+    return false;
+#else
     int res = system(command.c_str());
     if (res != 0)
     {
@@ -121,6 +126,7 @@ inline bool executeCommand(fmt::format_string<T...> fmt, T&&... args) {
     }
 
     return true;
+#endif
 }
 
 /*
