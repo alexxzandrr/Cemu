@@ -6,6 +6,17 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
+/// Wii U GamePad buttons for the on-screen controls (order matches WiiPadInput::Button).
+typedef NS_ENUM(NSInteger, WiiPadButton) {
+    WiiPadButtonA, WiiPadButtonB, WiiPadButtonX, WiiPadButtonY,
+    WiiPadButtonL, WiiPadButtonR, WiiPadButtonZL, WiiPadButtonZR,
+    WiiPadButtonPlus, WiiPadButtonMinus,
+    WiiPadButtonUp, WiiPadButtonDown, WiiPadButtonLeft, WiiPadButtonRight,
+    WiiPadButtonStickL, WiiPadButtonStickR,
+    /// Shows the GamePad screen in the game view while held (Cemu's VPAD "screen" mapping).
+    WiiPadButtonScreen,
+};
+
 @interface CemuBridge : NSObject
 
 @property (class, nonatomic, readonly) CemuBridge *shared;
@@ -44,6 +55,15 @@ NS_ASSUME_NONNULL_BEGIN
 /// Tears down the renderer and CafeSystem and flushes the logs.
 /// Not supported while a title is running (Phase 2A); in that case it only logs.
 - (void)shutdown;
+
+// --- GamePad input (Phase 2B). Cheap and thread-safe; call from the main thread on every touch change. ---
+
+/// Press or release a GamePad button.
+- (void)setGamePadButton:(WiiPadButton)button pressed:(BOOL)pressed;
+/// Stick position, x and y in [-1, 1] with y up positive. stick 0 = left, 1 = right.
+- (void)setGamePadStick:(NSInteger)stick x:(float)x y:(float)y;
+/// Touch on the game view, position normalized to [0, 1] with a top-left origin. Becomes GamePad touchscreen input.
+- (void)setGameViewTouchDown:(BOOL)down x:(float)x y:(float)y;
 
 /// Writes an app-side event into WiiPad.log.
 - (void)log:(NSString *)message;

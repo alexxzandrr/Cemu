@@ -17,6 +17,10 @@ namespace InputAPI
 		WGIGamepad,
 		WGIRawController,
 
+#if BOOST_OS_IOS
+		WiiPadTouch, // iPadOS on-screen GamePad controls (src/ios/WiiPadTouchController)
+#endif
+
 		MAX
 	};
 
@@ -42,6 +46,10 @@ namespace InputAPI
 			return "WGIRawController";
 		case SDLController:
 			return "SDLController";
+#if BOOST_OS_IOS
+		case WiiPadTouch:
+			return "WiiPadTouch";
+#endif
 		default:
 			break;
 		}

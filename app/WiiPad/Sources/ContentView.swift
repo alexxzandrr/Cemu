@@ -2,8 +2,9 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Diagnostic screen (Phase 1B/2A): initializes the Cemu core and the Metal renderer through CemuBridge,
-/// then lets the user hand a Wii U title from the Files app to Cemu's boot path. Not the real UI.
+/// Diagnostic screen (Phase 1B/2A/2B): initializes the Cemu core and the Metal renderer through CemuBridge,
+/// lets the user hand a Wii U title from the Files app to Cemu's boot path, then shows minimal
+/// on-screen GamePad controls. Not the real UI.
 @MainActor
 final class BootModel: ObservableObject {
     enum StepState { case pending, running, ok, failed }
@@ -121,12 +122,25 @@ final class BootModel: ObservableObject {
     }
 }
 
-/// UIView that hosts the CAMetalLayer created by the Cemu renderer.
+/// UIView that hosts the CAMetalLayer created by the Cemu renderer (the layer's own view ignores touches).
+/// Touches on it are forwarded to Cemu as GamePad touchscreen input (Phase 2B), normalized to [0, 1].
+final class GameSurfaceView: UIView {
+    private func forward(_ touches: Set<UITouch>, down: Bool) {
+        guard let touch = touches.first, bounds.width > 0, bounds.height > 0 else { return }
+        let p = touch.location(in: self)
+        CemuBridge.shared.setGameViewTouchDown(down, x: Float(p.x / bounds.width), y: Float(p.y / bounds.height))
+    }
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) { forward(touches, down: true) }
+    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) { forward(touches, down: true) }
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) { forward(touches, down: false) }
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) { forward(touches, down: false) }
+}
+
 struct MetalHostView: UIViewRepresentable {
     let onReady: @MainActor (UIView) -> Void
 
     func makeUIView(context: Context) -> UIView {
-        let view = UIView()
+        let view = GameSurfaceView()
         view.backgroundColor = .black
         // after SwiftUI has laid the view out, so it has a size
         Task { @MainActor in onReady(view) }
@@ -145,28 +159,42 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 20) {
             Text("WiiPad")
                 .font(.largeTitle.bold())
-            Text("Phase 2A · first Wii U title")
+            Text("Phase 2B/2C · input and audio")
                 .foregroundStyle(.secondary)
 
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(model.steps) { step in
-                    HStack(alignment: .firstTextBaseline, spacing: 10) {
-                        icon(for: step.state)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(step.id)
-                            if !step.detail.isEmpty {
-                                Text(step.detail)
-                                    .font(.footnote)
-                                    .foregroundStyle(.red)
+            // hidden while a title runs, to make room for the controls
+            if !model.titleLaunched {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(model.steps) { step in
+                        HStack(alignment: .firstTextBaseline, spacing: 10) {
+                            icon(for: step.state)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(step.id)
+                                if !step.detail.isEmpty {
+                                    Text(step.detail)
+                                        .font(.footnote)
+                                        .foregroundStyle(.red)
+                                }
                             }
                         }
                     }
                 }
             }
 
-            MetalHostView { view in model.start(hostView: view) }
-                .frame(width: 480, height: 270)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
+            // The Metal host view keeps the same position in this HStack in every state, so SwiftUI never
+            // recreates it (that would detach Cemu's CAMetalLayer). The GamePad controls appear beside it.
+            HStack(alignment: .center, spacing: 28) {
+                if model.titleLaunched {
+                    GamePadLeftPanel()
+                }
+                MetalHostView { view in model.start(hostView: view) }
+                    .frame(width: 480, height: 270)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                if model.titleLaunched {
+                    GamePadRightPanel()
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: model.titleLaunched ? .center : .leading)
 
             if model.readyForTitle && !model.titleLaunched {
                 HStack(spacing: 12) {
@@ -200,7 +228,7 @@ struct ContentView: View {
                 }
                 .disabled(model.shutDown || model.loadingTitle)
             } else if model.titleLaunched {
-                Text("A title is running. To stop it, close WiiPad from the app switcher.")
+                Text("A title is running. Touch the game view for GamePad touchscreen input; \"Pad view\" shows the GamePad screen there. To stop the title, close WiiPad from the app switcher.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

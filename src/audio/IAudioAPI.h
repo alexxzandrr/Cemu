@@ -45,6 +45,9 @@ public:
 		XAudio27,
 		XAudio2,
 		Cubeb,
+#if BOOST_OS_IOS
+		AudioUnitIOS, // src/ios/IOSAudioAPI
+#endif
 
 		AudioAPIEnd,
 	};

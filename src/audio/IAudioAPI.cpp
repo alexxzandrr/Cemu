@@ -9,6 +9,9 @@
 #if HAS_CUBEB
 #include "CubebAPI.h"
 #endif
+#if BOOST_OS_IOS
+#include "ios/IOSAudioAPI.h"
+#endif
 
 std::shared_mutex g_audioMutex;
 AudioAPIPtr g_tvAudio;
@@ -37,6 +40,9 @@ void IAudioAPI::PrintLogging()
 	}
 
 	cemuLog_log(LogType::Force, "Cubeb: {}", s_availableApis[Cubeb] ? "available" : "not supported");
+#if BOOST_OS_IOS
+	cemuLog_log(LogType::Force, "AudioUnit (iOS): {}", s_availableApis[AudioUnitIOS] ? "available" : "not supported");
+#endif
 }
 
 void IAudioAPI::InitWFX(sint32 samplerate, sint32 channels, sint32 bits_per_sample)
@@ -86,6 +92,9 @@ void IAudioAPI::InitializeStatic()
 #endif
 #if HAS_CUBEB
 	s_availableApis[Cubeb] = CubebAPI::InitializeStatic();
+#endif
+#if BOOST_OS_IOS
+	s_availableApis[AudioUnitIOS] = IOSAudioAPI::InitializeStatic();
 #endif
 }
 
@@ -164,6 +173,12 @@ AudioAPIPtr IAudioAPI::CreateDevice(AudioAPI api, const DeviceDescriptionPtr& de
 		return std::make_unique<CubebAPI>(tmp->GetDeviceId(), samplerate, channels, samples_per_block, bits_per_sample);
 	}
 #endif
+#if BOOST_OS_IOS
+	case AudioUnitIOS:
+	{
+		return std::make_unique<IOSAudioAPI>(samplerate, channels, samples_per_block, bits_per_sample);
+	}
+#endif
 	default:
 		throw std::runtime_error(fmt::format("invalid audio api: {}", api));
 	}
@@ -194,6 +209,12 @@ std::vector<IAudioAPI::DeviceDescriptionPtr> IAudioAPI::GetDevices(AudioAPI api)
 	case Cubeb:
 	{
 		return CubebAPI::GetDevices();
+	}
+#endif
+#if BOOST_OS_IOS
+	case AudioUnitIOS:
+	{
+		return IOSAudioAPI::GetDevices();
 	}
 #endif
 	default:

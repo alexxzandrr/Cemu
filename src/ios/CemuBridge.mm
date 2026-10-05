@@ -1,6 +1,8 @@
 #import "CemuBridge.h"
 
 #include "WiiPadLog.h"
+#include "WiiPadTouchController.h"
+#include "audio/IAudioAPI.h"
 
 #include "Cafe/CafeSystem.h"
 #include "Cafe/Filesystem/fsc.h"
@@ -475,8 +477,18 @@ namespace
 		// Cemu's ExceptionHandler_Init() replaced our signal handlers; chain ours in front of it again
 		WiiPadLog::InstallFatalSignalHandlers();
 
-		WiiPadLog::Write(fmt::format("audio: no backend in this build (Cubeb disabled for Phase 1B); graphics API in config: {}",
-			GetConfig().graphic_api == GraphicAPI::kMetal ? "Metal" : "other"));
+		// audio: CemuCommonInit loaded the config; select the iOS backend for this session (in memory only).
+		// Cubeb is not built for iOS (its AudioUnit backend uses macOS-only Core Audio APIs).
+		if (IAudioAPI::IsAudioAPIAvailable(IAudioAPI::AudioUnitIOS))
+		{
+			GetConfig().audio_api = IAudioAPI::AudioUnitIOS;
+			GetConfig().tv_device = L"default";
+			WiiPadLog::Write(fmt::format("audio: TV output -> AudioUnit (iOS) default device, volume {}%; GamePad audio: {}",
+				GetConfig().tv_volume, GetConfig().pad_device.empty() ? "off (no device configured, Cemu default)" : "configured"));
+		}
+		else
+			WiiPadLog::Write("audio: device error: the iOS audio backend is not available (see the 'audio:' lines above); the title will run without sound");
+		WiiPadLog::Write(fmt::format("graphics API in config: {}", GetConfig().graphic_api == GraphicAPI::kMetal ? "Metal" : "other"));
 		LogMemoryState("after CemuCommonInit");
 		_coreInitialized = YES;
 		return YES;
@@ -684,6 +696,10 @@ namespace
 		}
 
 		// --- boot ---
+		// input: on-screen controls as the emulated Wii U GamePad (Cemu's InputManager / VPADController)
+		if (!WiiPadInput::ConnectGamePad())
+			WiiPadLog::Write("input: continuing without GamePad input");
+
 		CafeSystem::SetImplementation(&s_systemImplementation);
 		g_cemuTitleLaunchStageCallback = &OnTitleLaunchStage;
 		WiiPadLog::SetStage("game initialization started");
@@ -698,6 +714,23 @@ namespace
 	{
 		return fail(std::string("game initialization failed: C++ exception: ") + ex.what());
 	}
+}
+
+- (void)setGamePadButton:(WiiPadButton)button pressed:(BOOL)pressed
+{
+	WiiPadInput::SetButton((WiiPadInput::Button)button, pressed);
+}
+
+- (void)setGamePadStick:(NSInteger)stick x:(float)x y:(float)y
+{
+	WiiPadInput::SetStick((int)stick, x, y);
+}
+
+- (void)setGameViewTouchDown:(BOOL)down x:(float)x y:(float)y
+{
+	if (!_titleLaunched)
+		return;
+	WiiPadInput::SetTouch(down, x, y);
 }
 
 - (void)shutdown
