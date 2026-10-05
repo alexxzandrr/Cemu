@@ -391,7 +391,7 @@ namespace
 	if (WiiPadLog::PreviousSessionCrashLogsKept())
 		WiiPadLog::Write("NOTE: the previous session crashed. Its logs were kept as WiiPad.crash.log, stdout.crash.txt and log.crash.txt");
 	else if (WiiPadLog::PreviousSessionEndedUncleanly())
-		WiiPadLog::Write("NOTE: the previous session did not shut down cleanly (app closed or killed). Its log is WiiPad.previous.log");
+		WiiPadLog::Write("NOTE: the previous session did not shut down cleanly (app closed, or killed by iOS). Its logs are WiiPad.previous.log, log.previous.txt and stdout.previous.txt");
 	WiiPadLog::MarkSessionRunning();
 	return self;
 }

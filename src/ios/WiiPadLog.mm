@@ -243,6 +243,14 @@ namespace WiiPadLog
 		else
 		{
 			rename(s_path.c_str(), (documentsDir + "/WiiPad.previous.log").c_str());
+			// ended uncleanly without a FATAL line: closed from the app switcher, or killed by iOS with an uncatchable
+			// SIGKILL (code signing, memory, watchdog). Keep Cemu's log.txt and stdout.txt too, since log.txt is
+			// rewritten on every start.
+			if (s_previousUnclean)
+			{
+				rename((documentsDir + "/log.txt").c_str(), (documentsDir + "/log.previous.txt").c_str());
+				rename((documentsDir + "/stdout.txt").c_str(), (documentsDir + "/stdout.previous.txt").c_str());
+			}
 		}
 
 		s_fd = open(s_path.c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_APPEND | O_CLOEXEC, 0644);
