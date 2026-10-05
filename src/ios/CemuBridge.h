@@ -8,13 +8,25 @@ NS_ASSUME_NONNULL_BEGIN
 
 /// Wii U GamePad buttons for the on-screen controls (order matches WiiPadInput::Button).
 typedef NS_ENUM(NSInteger, WiiPadButton) {
-    WiiPadButtonA, WiiPadButtonB, WiiPadButtonX, WiiPadButtonY,
-    WiiPadButtonL, WiiPadButtonR, WiiPadButtonZL, WiiPadButtonZR,
-    WiiPadButtonPlus, WiiPadButtonMinus,
-    WiiPadButtonUp, WiiPadButtonDown, WiiPadButtonLeft, WiiPadButtonRight,
-    WiiPadButtonStickL, WiiPadButtonStickR,
+    // explicit Swift names: the importer's prefix stripping is ambiguous for single-letter cases
+    WiiPadButtonA NS_SWIFT_NAME(a),
+    WiiPadButtonB NS_SWIFT_NAME(b),
+    WiiPadButtonX NS_SWIFT_NAME(x),
+    WiiPadButtonY NS_SWIFT_NAME(y),
+    WiiPadButtonL NS_SWIFT_NAME(l),
+    WiiPadButtonR NS_SWIFT_NAME(r),
+    WiiPadButtonZL NS_SWIFT_NAME(zl),
+    WiiPadButtonZR NS_SWIFT_NAME(zr),
+    WiiPadButtonPlus NS_SWIFT_NAME(plus),
+    WiiPadButtonMinus NS_SWIFT_NAME(minus),
+    WiiPadButtonUp NS_SWIFT_NAME(up),
+    WiiPadButtonDown NS_SWIFT_NAME(down),
+    WiiPadButtonLeft NS_SWIFT_NAME(left),
+    WiiPadButtonRight NS_SWIFT_NAME(right),
+    WiiPadButtonStickL NS_SWIFT_NAME(stickL),
+    WiiPadButtonStickR NS_SWIFT_NAME(stickR),
     /// Shows the GamePad screen in the game view while held (Cemu's VPAD "screen" mapping).
-    WiiPadButtonScreen,
+    WiiPadButtonScreen NS_SWIFT_NAME(screen),
 };
 
 @interface CemuBridge : NSObject
