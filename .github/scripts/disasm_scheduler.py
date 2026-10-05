@@ -30,7 +30,10 @@ def main():
         print("::warning::disasm: coreinit_Thread.cpp.o not found")
         return
     obj = objs[0]
-    symbols = [line.split()[-1] for line in run(["xcrun", "nm", "-defined-only", obj]).splitlines() if line.split()]
+    nm = run(["xcrun", "nm", obj])
+    # "<address> <type> <name>"; keep defined text symbols
+    symbols = [p[2] for p in (l.split() for l in nm.splitlines()) if len(p) == 3 and p[1] in ("T", "t")]
+    print(f"disasm: {obj}: {len(nm.splitlines())} nm lines, {len(symbols)} text symbols")
     blocks = []
     full = []
     for fn in FUNCTIONS:
