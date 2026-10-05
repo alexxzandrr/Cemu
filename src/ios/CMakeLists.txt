@@ -5,6 +5,7 @@
 #   - MetalLayerUIKit.mm  : CreateMetalLayer() (macOS: Renderer/Metal/MetalLayer.mm)
 #   - CemuBridge.mm       : the only API the SwiftUI app uses (CemuBridge.h is plain Objective-C)
 #   - WiiPadLog.mm        : crash-safe file log in the app's Documents folder
+#   - FiberIOS.cpp        : util/Fiber/Fiber.h on Boost.Context fcontext (iOS has no working ucontext)
 #   - WiiPadTouchController.cpp : on-screen controls as a Cemu input device for the emulated GamePad (VPAD)
 #   - IOSAudioAPI.mm      : IAudioAPI backend (RemoteIO AudioUnit), registered in audio/IAudioAPI.cpp
 #   - ../main.cpp         : provides CemuCommonInit(); its desktop main() is excluded on iOS
@@ -16,6 +17,7 @@ add_library(WiiPadPlatform STATIC
 	../main.cpp
 	CemuBridge.h
 	CemuBridge.mm
+	FiberIOS.cpp
 	IOSWindowSystem.mm
 	IOSAudioAPI.h
 	IOSAudioAPI.mm

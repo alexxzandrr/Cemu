@@ -6,6 +6,7 @@
 #include "Cafe/OS/libs/coreinit/coreinit_Thread.h"
 #include "Cafe/OS/RPL/rpl_symbol_storage.h"
 #include "util/helpers/helpers.h"
+#include "util/Fiber/Fiber.h"
 
 #include <chrono>
 #include <cxxabi.h>
@@ -279,7 +280,7 @@ namespace
 		WiiPadLog::Write(fmt::format("diag: fiber self-test: getcontext -> {} (errno {} {})", rGet, eGet, eGet ? strerror(eGet) : ""));
 		if (rGet != 0)
 		{
-			WiiPadLog::Write("diag: fiber self-test: ucontext is NOT available: Cemu's Fiber::Switch cannot switch, so the PPC scheduler cannot run guest threads");
+			WiiPadLog::Write("diag: fiber self-test: ucontext is not available on iOS (expected; WiiPad fibers use Boost.Context instead)");
 			return;
 		}
 		static uint8_t stack[256 * 1024] __attribute__((aligned(16)));
@@ -292,6 +293,26 @@ namespace
 		const int eSwap = errno;
 		WiiPadLog::Write(fmt::format("diag: fiber self-test: swapcontext -> {} (errno {} {}), fiber ran: {}", rSwap, eSwap, eSwap ? strerror(eSwap) : "",
 			s_testFiberRan.load() ? "yes" : "NO"));
+	}
+
+	// Same check for Cemu's Fiber class as built for iOS (src/ios/FiberIOS.cpp, Boost.Context): switch into a new
+	// fiber and back on the monitor thread. The test fiber is left suspended (it is never resumed again).
+	Fiber* s_monitorFiber = nullptr;
+	std::atomic_int s_cemuFiberSteps{ 0 };
+
+	void CemuFiberEntry(void*)
+	{
+		s_cemuFiberSteps = 1;
+		Fiber::Switch(*s_monitorFiber);
+	}
+
+	void CemuFiberSelfTest()
+	{
+		s_monitorFiber = Fiber::PrepareCurrentThread();
+		Fiber* testFiber = new Fiber(&CemuFiberEntry, nullptr, nullptr);
+		Fiber::Switch(*testFiber);
+		const bool ok = s_cemuFiberSteps.load() == 1;
+		WiiPadLog::Write(fmt::format("diag: fiber self-test (Cemu Fiber, Boost.Context): switch into a new fiber and back: {}", ok ? "OK" : "FAILED"));
 	}
 
 	// ---------------- monitor ----------------
@@ -383,7 +404,10 @@ namespace
 				LogHostThreads(lastCpuSnapshot, nextSnapshot == 0 ? 0.0 : t - snapshotTimes[nextSnapshot - 1], true);
 				LogGuestThreads();
 				if (nextSnapshot == 0)
-					FiberSelfTest(); // after the first snapshot is written, in case the test itself faults
+				{
+					FiberSelfTest();     // ucontext (expected to be unsupported on iOS)
+					CemuFiberSelfTest(); // Cemu's Fiber as built for iOS
+				}
 				WiiPadLog::Section("diag snapshot end");
 				nextSnapshot++;
 			}

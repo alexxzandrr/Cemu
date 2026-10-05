@@ -98,3 +98,22 @@ Diagnostic-only instrumentation (`src/ios/WiiPadDiagnostics.h/.mm`, lines prefix
   `makecontext` / `swapcontext` on the monitor thread with its own stack). Cemu's `FiberUnix.cpp` runs the scheduler
   idle loop and every PPC thread on these calls without checking their results: if they are unsupported,
   `Fiber::Switch` returns immediately and `OSSchedulerCoreEmulationThread` exits without running any guest code.
+
+### Result (diagnostic build 5886164, device run)
+
+- `diag: fiber self-test: getcontext -> -1 (errno 45 Operation not supported)`
+- no `OSSched[core=0]` host thread in any snapshot; the PPC scheduler lock is never free; `sched events`, `VPADRead`,
+  `GX2Init`, flips and audio counters stay 0; PPC timer frequency correct (~1 GHz)
+
+Cause: `OSSchedulerCoreEmulationThread` takes the scheduler lock and calls `Fiber::Switch` to the idle-loop fiber;
+with ucontext unsupported the switch returns at once, the thread falls through to "returned from scheduler loop" and
+exits while holding the lock. No guest code ever runs (also true for the Phase 2A builds). Input and audio were not
+involved.
+
+### Fix: `src/ios/FiberIOS.cpp`
+
+`util/Fiber/Fiber.h` implemented with Boost.Context `make_fcontext` / `jump_fcontext` (vcpkg `boost-context`, arm64
+Mach-O assembly). Same interface and semantics as `FiberUnix.cpp` (2 MB stack per fiber, `Switch`, thread-local current
+fiber, `GetFiberPrivateData`). `src/util/CMakeLists.txt` skips `FiberUnix.cpp` when `CEMU_IOS`; desktop unchanged.
+The diagnostics add a self-test of Cemu's `Fiber` on the monitor thread
+(`diag: fiber self-test (Cemu Fiber, Boost.Context): ... OK`).

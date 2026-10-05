@@ -59,7 +59,10 @@ Verified boot path, in order, from `WiiPad.log`:
 3. `GPU thread start` → `GPU initialization completed` (Metal renderer, shader cache, registers)
 4. `game initialization completed (coreinit entrypoint returned)`
 5. `PPC scheduler started: game code now runs on the single-core interpreter` (fibers via `FiberUnix.cpp` work)
-6. The game renders to the Metal surface on the iPad.
+6. ~~The game renders to the Metal surface on the iPad.~~ **Correction (Phase 2B/2C investigation):** the image was
+   Cemu's shader-cache loading screen (the title's `bootTvTex.tga`), not game output. No guest code ran after
+   `PPC scheduler started`: iOS does not implement `getcontext`/`swapcontext` (ENOTSUP), so Cemu's ucontext fibers
+   never switched and the scheduler thread exited. Fixed with `src/ios/FiberIOS.cpp`, see `PHASE2B_2C.md`.
 
 ### Blocker fixed on the way
 
