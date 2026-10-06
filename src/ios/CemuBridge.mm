@@ -39,12 +39,29 @@ extern void (*g_cemuTitleLaunchStageCallback)(const char* stage, bool begin);
 static NSString* const kCemuBridgeErrorDomain = @"WiiPad.CemuBridge";
 static NSString* const kSavedTitleBookmarkKey = @"WiiPadSavedTitleBookmark";
 static NSString* const kMulticoreInterpreterKey = @"WiiPadMulticoreInterpreter";
+static NSString* const kAsyncShaderCompileKey = @"WiiPadAsyncShaderCompile";
 
 namespace
 {
 	std::string ToStd(NSString* s)
 	{
 		return s ? std::string(s.UTF8String) : std::string();
+	}
+
+	// Builds before this one kept shaderCache/ in Library/Caches/Cemu. Move it once to its new place in Documents.
+	void MigrateShaderCache(const fs::path& oldDir, const fs::path& newDir)
+	{
+		std::error_code ec;
+		if (!fs::exists(oldDir, ec))
+			return;
+		if (fs::exists(newDir, ec))
+		{
+			WiiPadLog::Write("shader cache: old copy in Library/Caches ignored (Documents/shaderCache already exists)");
+			return;
+		}
+		fs::rename(oldDir, newDir, ec);
+		WiiPadLog::Write(ec ? "shader cache: moving Library/Caches/Cemu/shaderCache to Documents failed: " + ec.message()
+		                    : std::string("shader cache: moved from Library/Caches/Cemu to Documents/shaderCache"));
 	}
 
 	std::string SysctlString(const char* name)
@@ -435,7 +452,10 @@ namespace
 		NSString* documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
 		NSString* caches = NSSearchPathForDirectoriesInDomains(NSCachesDirectory, NSUserDomainMask, YES).firstObject;
 		const fs::path userData = _utf8ToPath(ToStd(documents));       // visible in the Files app
-		const fs::path cache = _utf8ToPath(ToStd(caches)) / "Cemu";     // shader caches etc.; system may purge
+		// Cemu's cache path only holds shaderCache/. Keep it in Documents (not Library/Caches, which iOS may purge),
+		// so compiled-shader lists persist and are visible in the Files app.
+		const fs::path cache = userData;
+		MigrateShaderCache(_utf8ToPath(ToStd(caches)) / "Cemu" / "shaderCache", cache / "shaderCache");
 		const fs::path data = _utf8ToPath(ToStd(NSBundle.mainBundle.resourcePath)); // read-only bundle resources
 		const fs::path exe = _utf8ToPath(ToStd(NSBundle.mainBundle.executablePath));
 		WiiPadLog::Write("path user data + config: " + _pathToUtf8(userData));
@@ -588,6 +608,18 @@ namespace
 	WiiPadLog::Write(fmt::format("setting: multi-core interpreter {}", enabled ? "on" : "off"));
 }
 
+- (BOOL)asyncShaderCompile
+{
+	id value = [NSUserDefaults.standardUserDefaults objectForKey:kAsyncShaderCompileKey];
+	return value ? [value boolValue] : YES; // Cemu's default
+}
+
+- (void)setAsyncShaderCompile:(BOOL)enabled
+{
+	[NSUserDefaults.standardUserDefaults setBool:enabled forKey:kAsyncShaderCompileKey];
+	WiiPadLog::Write(fmt::format("setting: async shader compilation {}", enabled ? "on" : "off"));
+}
+
 - (BOOL)titleLaunched
 {
 	return _titleLaunched;
@@ -662,6 +694,12 @@ namespace
 
 	try
 	{
+		// Shader compilation mode for this session (in memory only; Cemu logs it under "Active settings"). Async on: new
+		// shaders compile in the background and draws that need them are skipped until ready (objects pop in).
+		// Async off: emulation waits for each new shader (brief hitch, nothing missing).
+		GetConfig().async_compile = self.asyncShaderCompile ? true : false;
+		WiiPadLog::Write(fmt::format("shader compilation: {}", self.asyncShaderCompile ? "async (Cemu default)" : "synchronous (wait for each new shader)"));
+
 		// --- identify the title (same logic as the desktop MainWindow::FileLoad) ---
 		TitleInfo launchTitle{ titlePath };
 		CafeSystem::PREPARE_STATUS_CODE result;

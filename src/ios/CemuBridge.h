@@ -63,6 +63,10 @@ typedef NS_ENUM(NSInteger, WiiPadButton) {
 /// launched; stored across launches.
 @property (nonatomic) BOOL multicoreInterpreter;
 
+/// Cemu's "async shader compile" option (default YES). NO: emulation waits for each new shader instead of skipping the
+/// draw until it is compiled, so nothing pops in but new scenes hitch. Read when a title is launched; stored across launches.
+@property (nonatomic) BOOL asyncShaderCompile;
+
 /// The title selected in a previous session (resolved from its saved bookmark), or nil.
 @property (nonatomic, readonly, nullable) NSURL *savedTitleURL;
 

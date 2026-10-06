@@ -155,12 +155,13 @@ struct ContentView: View {
     @State private var showImporter = false
     @State private var importerTypes: [UTType] = [.folder]
     @State private var multicoreInterpreter = CemuBridge.shared.multicoreInterpreter
+    @State private var asyncShaderCompile = CemuBridge.shared.asyncShaderCompile
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             Text("WiiPad")
                 .font(.largeTitle.bold())
-            Text("Phase 2B/2C · input and audio")
+            Text("Phase 2 · shader cache")
                 .foregroundStyle(.secondary)
 
             // hidden while a title runs, to make room for the controls
@@ -227,6 +228,15 @@ struct ContentView: View {
                     .onChange(of: multicoreInterpreter) { enabled in
                         CemuBridge.shared.multicoreInterpreter = enabled
                     }
+                Toggle("Async shader compilation (on: smoother, but objects can be missing until their shaders compile; off: brief hitches, nothing missing)", isOn: $asyncShaderCompile)
+                    .font(.footnote)
+                    .frame(maxWidth: 620)
+                    .onChange(of: asyncShaderCompile) { enabled in
+                        CemuBridge.shared.asyncShaderCompile = enabled
+                    }
+                Text("Compiled shaders are kept in Files › On My iPad › WiiPad › shaderCache and precompiled on the loading screen of the next launch.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
             }
 
             if model.finished && !model.titleLaunched {
