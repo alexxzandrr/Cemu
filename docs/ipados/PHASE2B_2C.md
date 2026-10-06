@@ -126,3 +126,12 @@ two halves, matching `FiberUnix.cpp`, which passes the parameter to `makecontext
 `FiberIOS.cpp` passed the pointer whole, so the entry rebuilt `(low32 << 32) | garbage`. The trampoline now uses the
 same split convention on arm64 (no coreinit change). The scheduler idle-loop fiber ignores its parameter, which is why
 it ran. The self-test now passes a real pointer and checks it arrives intact.
+
+### Multi-core interpreter crash (77111cd .. 5c21e08) and fix
+
+iOS crash report: `EXC_BAD_ACCESS` executing `0x70104054c8`, termination CODESIGNING "Invalid Page", on
+`OSSched[core=2]`; `jump_fcontext` restored a stale context. The FiberIOS ownership check (5c21e08) then reported the
+cause directly: core 2's guest-thread fiber switched **to itself**. In multi-core mode `__OSThreadSwitchToNext` on a
+non-main core re-queues the current thread and can pick it again. With ucontext (`swapcontext(ctx, ctx)`) that is
+effectively a no-op; with `jump_fcontext` it jumps to the fiber's stale context from its previous suspension. Fix:
+`Fiber::Switch` returns immediately when the target is the current fiber. Not an upstream or iOS API issue.

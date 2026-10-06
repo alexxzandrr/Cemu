@@ -147,6 +147,14 @@ void Fiber::Switch(Fiber& targetFiber)
 {
 	FiberContext* leaving = sCurrentContext;
 	FiberContext* target = static_cast<FiberContext*>(targetFiber.m_implData);
+
+	// Switching to the fiber that is already running is a no-op. Cemu does this in multi-core mode: on a non-main core
+	// __OSThreadSwitchToNext re-queues the current guest thread and may pick it again. FiberUnix's swapcontext(ctx, ctx)
+	// saves and immediately restores the same context, i.e. returns; jump_fcontext would instead jump to the fiber's
+	// stale context from its previous suspension (crash: CODESIGNING "Invalid Page" on OSSched[core=2]).
+	if (target == leaving)
+		return;
+
 	const uint64_t self = HostThreadId();
 
 	// ownership checks (diagnostics): the leaving fiber must be the one running here, and the target must be suspended
@@ -157,7 +165,7 @@ void Fiber::Switch(Fiber& targetFiber)
 		abort();
 	}
 	uint64_t expected = 0;
-	if (target == leaving || !target->runningOn.compare_exchange_strong(expected, self, std::memory_order_acquire))
+	if (!target->runningOn.compare_exchange_strong(expected, self, std::memory_order_acquire))
 	{
 		WiiPadLog::Fatal(fmt::format("Fiber::Switch on host thread {} \"{}\" to a fiber that is still running (its saved context is stale). "
 			"target: {}; switching from: {}; fiber migrations so far: {}",
