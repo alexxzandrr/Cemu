@@ -135,3 +135,6 @@ cause directly: core 2's guest-thread fiber switched **to itself**. In multi-cor
 non-main core re-queues the current thread and can pick it again. With ucontext (`swapcontext(ctx, ctx)`) that is
 effectively a no-op; with `jump_fcontext` it jumps to the fiber's stale context from its previous suspension. Fix:
 `Fiber::Switch` returns immediately when the target is the current fiber. Not an upstream or iOS API issue.
+
+Checkpoint: the fiber ownership checks, the CI scheduler disassembly and the ucontext self-test were removed after the
+multi-core build ran stably on the device; see `PHASE2_CHECKPOINT.md` for the summary and performance baseline.

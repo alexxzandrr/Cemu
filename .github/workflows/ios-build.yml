@@ -136,11 +136,6 @@ jobs:
         if: failure() && steps.core.outcome == 'failure'
         run: python3 .github/scripts/annotate_errors.py "CemuCore" "$LOG_DIR/cemucore-build.log"
 
-      - name: Scheduler disassembly (diagnostic, multi-core investigation)
-        if: steps.core.outcome == 'success'
-        continue-on-error: true
-        run: python3 .github/scripts/disasm_scheduler.py build-ios "$LOG_DIR/scheduler-disassembly.txt"
-
       - name: Generate Xcode project (XcodeGen)
         working-directory: app/WiiPad
         run: |
