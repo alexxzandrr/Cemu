@@ -20,6 +20,7 @@ struct PadButton: View {
     var circle = true
 
     @State private var pressed = false
+    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         let shape = RoundedRectangle(cornerRadius: circle ? min(width, height) / 2 : min(width, height) * 0.22)
@@ -37,6 +38,7 @@ struct PadButton: View {
                     .onEnded { _ in set(false) }
             )
             // hiding the controls mid-press must not leave the button held
+            .onChange(of: isEnabled) { enabled in if !enabled { set(false) } }
             .onDisappear { set(false) }
     }
 
@@ -54,6 +56,7 @@ struct PadStick: View {
 
     @State private var knob = CGSize.zero
     @State private var active = false
+    @Environment(\.isEnabled) private var isEnabled
 
     var body: some View {
         let radius = diameter / 2
@@ -81,6 +84,7 @@ struct PadStick: View {
                 }
                 .onEnded { _ in release() }
         )
+        .onChange(of: isEnabled) { enabled in if !enabled { release() } }
         .onDisappear { release() }
     }
 
@@ -150,7 +154,8 @@ private struct ToolbarButton: View {
 /// (GamePad/TV screen, tilt recenter, control opacity, hide controls).
 struct GamePadOverlay: View {
     @AppStorage("WiiPadControlsOpacity") private var controlsOpacity = 0.55
-    @AppStorage("WiiPadControlsHidden") private var controlsHidden = false
+    // not persisted: a title always starts with the controls shown
+    @State private var controlsHidden = false
     @State private var showGamePadScreen = false
 
     private static let opacityChoices: [Double] = [0.3, 0.55, 0.8, 1.0]
@@ -160,10 +165,12 @@ struct GamePadOverlay: View {
             // sizes are tuned for an 11" iPad (820 pt short side) and scaled for other screens
             let s = min(max(min(geo.size.width, geo.size.height) / 820, 0.8), 1.3)
             ZStack {
-                if !controlsHidden {
-                    controls(scale: s)
-                        .opacity(controlsOpacity)
-                }
+                // Hidden controls stay in the view tree (invisible, disabled, not hit-testable) so the overlay's
+                // layout over the game view is the same in both states; only visibility changes.
+                controls(scale: s)
+                    .opacity(controlsHidden ? 0 : controlsOpacity)
+                    .allowsHitTesting(!controlsHidden)
+                    .disabled(controlsHidden)
                 VStack {
                     toolbar
                     Spacer()
@@ -214,7 +221,8 @@ struct GamePadOverlay: View {
 
     private var toolbar: some View {
         HStack(spacing: 8) {
-            if !controlsHidden {
+            // kept in place while hidden (invisible, not hit-testable), so Show sits exactly where Hide was
+            HStack(spacing: 8) {
                 ToolbarButton(systemImage: "rectangle.on.rectangle",
                               label: showGamePadScreen ? "TV view" : "Pad view",
                               highlighted: showGamePadScreen) {
@@ -236,12 +244,15 @@ struct GamePadOverlay: View {
                     ToolbarLabel(systemImage: "circle.lefthalf.filled", label: "\(Int(controlsOpacity * 100)) %")
                 }
             }
+            .opacity(controlsHidden ? 0 : 1)
+            .allowsHitTesting(!controlsHidden)
+
             ToolbarButton(systemImage: controlsHidden ? "gamecontroller" : "eye.slash",
-                          label: controlsHidden ? "Show controls" : nil) {
+                          label: controlsHidden ? "Show controls" : "Hide") {
                 controlsHidden.toggle()
                 CemuBridge.shared.log("on-screen controls \(controlsHidden ? "hidden" : "shown")")
             }
-            .opacity(controlsHidden ? 0.5 : 1)
+            .contentShape(Capsule())
         }
     }
 }
