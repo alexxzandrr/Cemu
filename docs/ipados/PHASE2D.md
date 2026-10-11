@@ -22,3 +22,15 @@ Desktop gyro sources (SDL gamepad sensors, DSU) convert their sensor axes to one
 Hold the iPad like a GamePad (landscape, screen facing you). Log lines: `motion: Core Motion device motion started`,
 `motion: first sample (...)`, `motion: recentered`; heartbeat `| motion +N` (samples per interval).
 No upstream Cemu file changed.
+
+## Fix: Recenter drifted back (2026-10-11)
+
+Device report: Recenter snapped the view, which then slid back to where it was. Cause: Recenter only reset the sensor
+fusion (`WiiUMotionHandler`); the Mahony filter's accelerometer feedback then pulled the fused orientation back to
+the real tilt within about a second, so the game saw a jump followed by a slow rotation back.
+
+Now Recenter is a calibration: the current gravity direction (Core Motion `gravity`, gamepad frame) is rotated onto
+the "GamePad held upright, screen facing you" reference (shortest-arc rotation), and every later accelerometer and
+gyro sample is rotated the same way. The fusion is reset and settled on the rotated gravity at once (500 steps of
+20 ms), so the game sees one step to the new centre, yaw included, and nothing to drift back to. Log:
+`motion: recentered: current pose is the new upright (it was N deg from upright; ...)`.

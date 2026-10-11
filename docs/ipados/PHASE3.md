@@ -70,3 +70,12 @@ Open issues from this run:
   New shaders (async compilation) are the other candidate. The 10 s heartbeat is too coarse to separate the two;
   `+22..28 s` (`VPADRead` 55, 0, 1, 20) is most likely a loading screen.
 - The GPU thread approaches 100 % in heavier scenes: the next bottleneck after the CPU.
+
+### Follow-up: the character glitch was the empty shader cache, not the recompiler
+
+The run above started with `config: ... (first start, writing defaults)`: installing the build had wiped WiiPad's data
+container (settings, `mlc01` saves, `shaderCache`). With an empty cache every pipeline compiles while playing, and with
+async compilation Cemu skips draws until theirs is ready. Its filter (`IsAsyncPipelineAllowed`) allows that for any draw
+with a depth attachment, which includes character models. After a relaunch the cache existed and the Inkling looked
+right. WiiPad now logs the cache state at title launch (`shader cache: EMPTY (first run since install) ...` or
+`shader cache: N files, X MB`) and says explicitly when Documents was empty at startup.

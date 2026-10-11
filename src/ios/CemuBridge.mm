@@ -50,6 +50,31 @@ namespace
 		return s ? std::string(s.UTF8String) : std::string();
 	}
 
+	// Logs what is in Documents/shaderCache: an empty cache means every shader is compiled while playing (with async
+	// compilation, draws are skipped until their shader is ready, so a first run can look wrong, e.g. parts of a character).
+	void LogShaderCacheState()
+	{
+		std::error_code ec;
+		const fs::path dir = ActiveSettings::GetCachePath("shaderCache");
+		size_t files = 0;
+		uintmax_t bytes = 0;
+		if (fs::exists(dir, ec))
+		{
+			for (auto it = fs::recursive_directory_iterator(dir, ec); !ec && it != fs::recursive_directory_iterator(); it.increment(ec))
+			{
+				if (it->is_regular_file(ec))
+				{
+					files++;
+					bytes += it->file_size(ec);
+				}
+			}
+		}
+		if (files == 0)
+			WiiPadLog::Write("shader cache: EMPTY (first run since install): shaders compile while playing; with async compilation some objects are missing or wrong until theirs are ready");
+		else
+			WiiPadLog::Write(fmt::format("shader cache: {} files, {:.1f} MB in Documents/shaderCache (precompiled on the loading screen)", files, bytes / (1024.0 * 1024.0)));
+	}
+
 	// Builds before this one kept shaderCache/ in Library/Caches/Cemu. Move it once to its new place in Documents.
 	void MigrateShaderCache(const fs::path& oldDir, const fs::path& newDir)
 	{
@@ -482,7 +507,7 @@ namespace
 		GetConfigHandle().SetFilename(settingsPath.generic_wstring());
 		std::error_code ec;
 		const bool firstStart = !fs::exists(settingsPath, ec);
-		WiiPadLog::Write(fmt::format("config: {} ({})", _pathToUtf8(settingsPath), firstStart ? "first start, writing defaults" : "exists"));
+		WiiPadLog::Write(fmt::format("config: {} ({})", _pathToUtf8(settingsPath), firstStart ? "first start, writing defaults. Documents was empty: fresh install, so earlier saves (mlc01) and the shader cache are not here" : "exists"));
 		if (firstStart)
 			GetConfigHandle().Save();
 		NetworkConfig::LoadOnce();
@@ -740,6 +765,8 @@ namespace
 		// Async off: emulation waits for each new shader (brief hitch, nothing missing).
 		GetConfig().async_compile = self.asyncShaderCompile ? true : false;
 		WiiPadLog::Write(fmt::format("shader compilation: {}", self.asyncShaderCompile ? "async (Cemu default)" : "synchronous (wait for each new shader)"));
+
+		LogShaderCacheState();
 
 		// --- CPU emulation: decided before PrepareForegroundTitle, which calls PPCRecompiler_init ---
 		const bool multicore = self.multicoreCPU;
