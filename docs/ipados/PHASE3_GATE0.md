@@ -52,3 +52,36 @@ shows which step.
 | Passed attached, killed after detach | Feasible, but StikDebug must stay attached while playing (as Play! does) |
 | No executable region / killed at test 1 | Not possible on this iPadOS build with this method; speed stays interpreter-bound |
 | `get-task-allow: NO` | Fix signing first (sideloading tool / profile), then rerun |
+
+## Result: PASSED, also after detach (build 0d419d1, 2026-10-11)
+
+Device `iPad15,6` (iPad Air 13" M3), iPadOS 27.2, StikDebug with `universal.js`.
+
+```
+jit: iPadOS 27.2.0, csops ok true, flags 0x32003005, get-task-allow true, CS_DEBUGGED true
+jit: JIT26PrepareRegion(NULL, 64 MB), attempt 1
+jit: JIT26PrepareRegion returned 0x115078000 after 274 ms
+jit: RX region 0x115078000: entry 0x115078000+16 KB, prot r-x max rwx
+jit: vm_remap -> kr 0 at 0x119078000 (cur r-x max rwx)
+jit: vm_protect(alias, rw-) -> kr 0
+jit: [attached] tests PASSED          (42, 40+2, patched 1234; 1M calls in ~1.1 ms)
+jit: calling JIT26Detach
+jit: detached; CS_DEBUGGED now true
+jit: [detached] tests PASSED          (1M calls in 1.4 ms)
+jit: GATE 0 PASSED (also after detach)
+```
+
+- The first request succeeded (no retries); preparing 64 MB took 274 ms (debugserver touches each 16 KB page; each
+  page shows up as its own VM entry, hence "+16 KB").
+- Writable alias via `vm_remap` + `vm_protect rw-` works; code written through it runs at the RX address.
+- Patching code that already ran works (needed for block linking / invalidation).
+- Generated calls run at native speed (~1.1 ns per call).
+- After `JIT26Detach` execution and patching keep working; `CS_DEBUGGED` stays set. StikDebug does not have to stay
+  attached while playing: the recompiler can prepare its whole arena up front, then detach.
+- Not covered: writing into a page for the first time after detach (all pages used were written before). The
+  recompiler integration will exercise this first.
+- Moving to StikDebug and back made iOS lay the view out briefly in portrait (`game view resized: 1024x1366`, app
+  switcher snapshot); harmless.
+
+Next: Phase 3 proper — run Cemu's AArch64 recompiler backend (`BackendAArch64`, xbyak_aarch64) with its code
+allocated from this arena (generate into a buffer, copy through the RW alias, execute at the RX address).

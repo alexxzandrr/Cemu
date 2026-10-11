@@ -178,7 +178,10 @@ namespace WiiPadJIT
 			return "Not run: StikDebug is not attached yet.";
 		}
 		if (s_detached)
+		{
+			Log("not run: already detached in this session");
 			return "Already detached in this session; restart WiiPad and enable JIT again to rerun.";
+		}
 
 		if (!s_rx)
 		{
