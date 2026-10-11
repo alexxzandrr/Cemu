@@ -41,6 +41,7 @@ static NSString* const kCemuBridgeErrorDomain = @"WiiPad.CemuBridge";
 static NSString* const kSavedTitleBookmarkKey = @"WiiPadSavedTitleBookmark";
 static NSString* const kMulticoreInterpreterKey = @"WiiPadMulticoreInterpreter";
 static NSString* const kAsyncShaderCompileKey = @"WiiPadAsyncShaderCompile";
+static NSString* const kUseJITKey = @"WiiPadUseJIT";
 
 namespace
 {
@@ -275,7 +276,7 @@ namespace
 	}
 
 	std::atomic_bool s_monitorStop{ false };
-	bool s_multicoreInterpreter = false; // set at title launch
+	const char* s_cpuModeName = "single-core interpreter"; // set at title launch
 
 	void OnTitleLaunchStage(const char* stage, bool begin)
 	{
@@ -285,8 +286,7 @@ namespace
 		else if (strstr(stage, "game initialization") && !begin)
 			WiiPadLog::Write("game initialization completed (coreinit entrypoint returned)");
 		else if (strstr(stage, "PPC scheduler"))
-			WiiPadLog::Write(s_multicoreInterpreter ? "PPC scheduler started: game code now runs on the multi-core interpreter (3 host threads)"
-				: "PPC scheduler started: game code now runs on the single-core interpreter");
+			WiiPadLog::Write(fmt::format("PPC scheduler started: game code now runs on the {}", s_cpuModeName));
 		else
 			WiiPadLog::Write(fmt::format("boot stage {}: {}", begin ? "begin" : "end  ", stage));
 	}
@@ -494,7 +494,7 @@ namespace
 		ProbeGuestAddressSpace();
 
 		// --- CemuCommonInit ---
-		WiiPadLog::Write(fmt::format("CPU mode: {} (forced on iPadOS, no JIT)", ActiveSettings::GetCPUMode() == CPUMode::SinglecoreInterpreter ? "single-core interpreter" : "UNEXPECTED"));
+		WiiPadLog::Write("CPU mode: chosen at title launch (recompiler if JIT is enabled, otherwise interpreter)");
 		WiiPadLog::Write("CemuCommonInit: start");
 		g_cemuCommonInitStageCallback = &OnCemuInitStage;
 		CemuCommonInit();
@@ -626,15 +626,27 @@ namespace
 		windowInfo.phys_width.load(), windowInfo.phys_height.load()));
 }
 
-- (BOOL)multicoreInterpreter
+- (BOOL)multicoreCPU
 {
-	return [NSUserDefaults.standardUserDefaults boolForKey:kMulticoreInterpreterKey];
+	return [NSUserDefaults.standardUserDefaults boolForKey:kMulticoreInterpreterKey]; // key kept from Phase 2
 }
 
-- (void)setMulticoreInterpreter:(BOOL)enabled
+- (void)setMulticoreCPU:(BOOL)enabled
 {
 	[NSUserDefaults.standardUserDefaults setBool:enabled forKey:kMulticoreInterpreterKey];
-	WiiPadLog::Write(fmt::format("setting: multi-core interpreter {}", enabled ? "on" : "off"));
+	WiiPadLog::Write(fmt::format("setting: multi-core CPU emulation {}", enabled ? "on" : "off"));
+}
+
+- (BOOL)useJIT
+{
+	id value = [NSUserDefaults.standardUserDefaults objectForKey:kUseJITKey];
+	return value ? [value boolValue] : YES;
+}
+
+- (void)setUseJIT:(BOOL)enabled
+{
+	[NSUserDefaults.standardUserDefaults setBool:enabled forKey:kUseJITKey];
+	WiiPadLog::Write(fmt::format("setting: use the recompiler when JIT is enabled {}", enabled ? "on" : "off"));
 }
 
 - (BOOL)asyncShaderCompile
@@ -729,6 +741,23 @@ namespace
 		GetConfig().async_compile = self.asyncShaderCompile ? true : false;
 		WiiPadLog::Write(fmt::format("shader compilation: {}", self.asyncShaderCompile ? "async (Cemu default)" : "synchronous (wait for each new shader)"));
 
+		// --- CPU emulation: decided before PrepareForegroundTitle, which calls PPCRecompiler_init ---
+		const bool multicore = self.multicoreCPU;
+		if (WiiPadJIT::ArenaReady() && self.useJIT)
+		{
+			ActiveSettings::SetIOSCPUMode(multicore ? CPUMode::MulticoreRecompiler : CPUMode::SinglecoreRecompiler);
+			s_cpuModeName = multicore ? "multi-core recompiler (JIT, 3 host threads)" : "single-core recompiler (JIT)";
+		}
+		else
+		{
+			// the multi-core interpreter is selected like the desktop --force-multicore-interpreter option (below)
+			ActiveSettings::SetIOSCPUMode(CPUMode::SinglecoreInterpreter);
+			s_cpuModeName = multicore ? "multi-core interpreter (3 host threads)" : "single-core interpreter";
+		}
+		WiiPadLog::Write(fmt::format("CPU mode for this title: {} (JIT {}, recompiler setting {})", s_cpuModeName,
+			WiiPadJIT::ArenaReady() ? fmt::format("enabled, {} MB arena", WiiPadJIT::ArenaSize() >> 20) : std::string("not enabled"),
+			self.useJIT ? "on" : "off"));
+
 		// --- identify the title (same logic as the desktop MainWindow::FileLoad) ---
 		TitleInfo launchTitle{ titlePath };
 		CafeSystem::PREPARE_STATUS_CODE result;
@@ -784,16 +813,13 @@ namespace
 		if (!WiiPadInput::ConnectGamePad())
 			WiiPadLog::Write("input: continuing without GamePad input");
 
-		// CPU emulation: the single-core interpreter (default) or, if enabled, Cemu's multi-core interpreter, selected the
-		// same way as the desktop command line option. No recompiler/JIT either way.
-		s_multicoreInterpreter = self.multicoreInterpreter;
-		if (s_multicoreInterpreter)
+		// multi-core interpreter: selected the same way as the desktop command line option (recompiler modes need nothing)
+		if (multicore && ActiveSettings::GetCPUMode() == CPUMode::SinglecoreInterpreter)
 			LaunchSettings::HandleCommandline(std::vector<std::wstring>{ L"--force-multicore-interpreter" });
 		CafeSystem::SetImplementation(&s_systemImplementation);
 		g_cemuTitleLaunchStageCallback = &OnTitleLaunchStage;
 		WiiPadLog::SetStage("game initialization started");
-		WiiPadLog::Write(fmt::format("game initialization started: CafeSystem::LaunchForegroundTitle() (CPU: {})",
-			LaunchSettings::ForceMultiCoreInterpreter() ? "multi-core interpreter, experimental" : "single-core interpreter"));
+		WiiPadLog::Write(fmt::format("game initialization started: CafeSystem::LaunchForegroundTitle() (CPU: {})", s_cpuModeName));
 		CafeSystem::LaunchForegroundTitle();
 		_titleLaunched = YES;
 		StartProgressMonitor();
@@ -834,9 +860,14 @@ namespace
 	return WiiPadJIT::GetCodeSignStatus().debugged;
 }
 
-- (NSString*)runJITGate0Detaching:(BOOL)detach
+- (BOOL)jitReady
 {
-	return [NSString stringWithUTF8String:WiiPadJIT::RunGate0(detach).c_str()];
+	return WiiPadJIT::ArenaReady();
+}
+
+- (NSString*)enableJIT
+{
+	return [NSString stringWithUTF8String:WiiPadJIT::EnableArena().c_str()];
 }
 
 - (void)recenterMotion

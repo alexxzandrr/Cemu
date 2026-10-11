@@ -1,24 +1,28 @@
 import SwiftUI
 import UIKit
 
-/// Phase 3 Gate 0: asks StikDebug to attach to WiiPad (stikdebug://enable-jit with its universal.js script, the
-/// iOS 26+ TXM path), waits until the debugger is attached, then runs CemuBridge's JIT test off the main thread.
+/// Phase 3: asks StikDebug to attach to WiiPad (stikdebug://enable-jit with its universal.js script, the iOS 26+ TXM
+/// path), waits until the debugger is attached, then has CemuBridge prepare the JIT code arena (which detaches
+/// StikDebug again). Titles launched afterwards run on Cemu's recompiler.
 @MainActor
-final class JITTestModel: ObservableObject {
+final class JITModel: ObservableObject {
     @Published var status = CemuBridge.shared.jitStatus
+    @Published var ready = CemuBridge.shared.jitReady
     @Published var result: String?
     @Published var busy = false
-    @Published var passedAttached = false
 
     private var waitTask: Task<Void, Never>?
 
-    func refresh() { status = CemuBridge.shared.jitStatus }
+    func refresh() {
+        status = CemuBridge.shared.jitStatus
+        ready = CemuBridge.shared.jitReady
+    }
 
     func start() {
-        guard !busy else { return }
+        guard !busy, !ready else { return }
         result = nil
         if CemuBridge.shared.jitDebuggerAttached {
-            run(detach: false)
+            enable()
             return
         }
         busy = true
@@ -58,7 +62,7 @@ final class JITTestModel: ObservableObject {
                     self.refresh()
                     CemuBridge.shared.log("jit: debugger attached")
                     self.busy = false
-                    self.run(detach: false)
+                    self.enable()
                     return
                 }
                 try? await Task.sleep(nanoseconds: 500_000_000)
@@ -71,15 +75,14 @@ final class JITTestModel: ObservableObject {
         }
     }
 
-    func run(detach: Bool) {
+    private func enable() {
         guard !busy else { return }
         busy = true
-        result = detach ? "Detaching and testing again…" : "Running the JIT test…"
+        result = "Preparing JIT memory (a few seconds)…"
         Task.detached(priority: .userInitiated) {
-            let line = CemuBridge.shared.runJITGate0Detaching(detach)
+            let line = CemuBridge.shared.enableJIT()
             await MainActor.run {
                 self.result = line
-                if line.hasPrefix("Passed") { self.passedAttached = true }
                 self.busy = false
                 self.refresh()
             }
@@ -87,37 +90,36 @@ final class JITTestModel: ObservableObject {
     }
 }
 
-struct JITTestSection: View {
-    @StateObject private var model = JITTestModel()
+struct JITSection: View {
+    @StateObject private var model = JITModel()
+    @State private var useJIT = CemuBridge.shared.useJIT
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("JIT test (Phase 3, Gate 0)")
+            Text("JIT (recompiler)")
                 .font(.headline)
             Text(model.status)
                 .font(.footnote.monospaced())
-                .foregroundStyle(.secondary)
-            HStack(spacing: 12) {
-                Button(model.busy ? "Working…" : "Enable JIT with StikDebug and test") {
+                .foregroundStyle(model.ready ? .green : .secondary)
+            if !model.ready {
+                Button(model.busy ? "Working…" : "Enable JIT with StikDebug") {
                     model.start()
                 }
                 .buttonStyle(.bordered)
                 .disabled(model.busy)
-                if model.passedAttached {
-                    Button("Test after detach (may close WiiPad)") {
-                        model.run(detach: true)
-                    }
-                    .buttonStyle(.bordered)
-                    .disabled(model.busy)
-                }
             }
             if let result = model.result {
                 Text(result)
                     .font(.footnote)
-                    .foregroundStyle(result.hasPrefix("Passed") ? .green : (result.hasPrefix("Failed") ? .red : .primary))
+                    .foregroundStyle(result.hasPrefix("JIT enabled") ? .green : (result.hasPrefix("Failed") ? .red : .primary))
             }
-            Text("Tests whether WiiPad can generate and run machine code (needed for the recompiler). Results are written to WiiPad.log (lines starting with \"jit:\"). Run it before loading a title.")
+            Toggle("Use the recompiler when JIT is enabled (off: interpreter, for comparison)", isOn: $useJIT)
+                .font(.footnote)
+                .onChange(of: useJIT) { enabled in
+                    CemuBridge.shared.useJIT = enabled
+                }
+            Text("Enable JIT once per app session, before loading a title: StikDebug attaches, WiiPad prepares its code memory, and StikDebug detaches again. Without JIT, titles run on the interpreter. Details in WiiPad.log (lines starting with \"jit:\").")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }

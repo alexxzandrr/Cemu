@@ -162,7 +162,7 @@ struct ContentView: View {
     @StateObject private var model = BootModel()
     @State private var showImporter = false
     @State private var importerTypes: [UTType] = [.folder]
-    @State private var multicoreInterpreter = CemuBridge.shared.multicoreInterpreter
+    @State private var multicoreCPU = CemuBridge.shared.multicoreCPU
     @State private var asyncShaderCompile = CemuBridge.shared.asyncShaderCompile
 
     var body: some View {
@@ -195,7 +195,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 20) {
                 Text("WiiPad")
                     .font(.largeTitle.bold())
-                Text("Phase 3 · Gate 0 JIT test")
+                Text("Phase 3 · JIT recompiler")
                     .foregroundStyle(.secondary)
 
                 VStack(alignment: .leading, spacing: 12) {
@@ -238,10 +238,10 @@ struct ContentView: View {
                     Text("Folder: an extracted title's root (with code, content and meta). File: .wua, .wud, .wux, .wuhb or a homebrew .rpx. Disc images also need keys.txt in WiiPad's folder.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                    Toggle("Multi-core interpreter (experimental: three host threads for the three Wii U cores)", isOn: $multicoreInterpreter)
+                    Toggle("Multi-core (experimental: three host threads for the three Wii U cores; recompiler or interpreter)", isOn: $multicoreCPU)
                         .font(.footnote)
-                        .onChange(of: multicoreInterpreter) { enabled in
-                            CemuBridge.shared.multicoreInterpreter = enabled
+                        .onChange(of: multicoreCPU) { enabled in
+                            CemuBridge.shared.multicoreCPU = enabled
                         }
                     Toggle("Async shader compilation (on: smoother, but objects can be missing until their shaders compile; off: brief hitches, nothing missing)", isOn: $asyncShaderCompile)
                         .font(.footnote)
@@ -257,7 +257,7 @@ struct ContentView: View {
                 }
 
                 Divider()
-                JITTestSection()
+                JITSection()
                 Divider()
 
                 if model.finished {

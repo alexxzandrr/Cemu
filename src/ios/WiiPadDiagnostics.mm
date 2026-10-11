@@ -1,5 +1,6 @@
 #include "WiiPadDiagnostics.h"
 #include "WiiPadLog.h"
+#include "WiiPadJIT.h"
 
 #include "Cafe/HW/Latte/Core/Latte.h"
 #include "Cafe/OS/libs/coreinit/coreinit_Scheduler.h"
@@ -345,7 +346,7 @@ namespace
 				auto threads = ListHostThreads();
 				for (auto& h : threads)
 				{
-					if (h.name.rfind("OSSched", 0) == 0 || h.name == "LatteThread")
+					if (h.name.rfind("OSSched", 0) == 0 || h.name == "LatteThread" || h.name == "PPCRecompiler")
 					{
 						const double delta = h.cpuSeconds - lastCpuHeartbeat[h.port];
 						lastCpuHeartbeat[h.port] = h.cpuSeconds;
@@ -357,10 +358,11 @@ namespace
 			if (prevT > 0.0 || t > 0.5)
 			{
 				WiiPadLog::Write(fmt::format(
-					"diag: hb +{:.0f}s{} | sched events +{} | VPADRead +{} (total {}, last {}) | GX2Init {} flips {} | audio play {} feed +{} render +{} (with data +{}, last {}) | motion +{}",
+					"diag: hb +{:.0f}s{} | sched events +{} | VPADRead +{} (total {}, last {}) | GX2Init {} flips {} | audio play {} feed +{} render +{} (with data +{}, last {}) | motion +{}{}",
 					t, hostLine, cur.sched - prev.sched, cur.vpad - prev.vpad, cur.vpad, Ago(vpadRead),
 					(uint32)LatteGPUState.gx2InitCalled, (uint32)LatteGPUState.flipCounter,
-					cur.play, cur.feed - prev.feed, cur.render - prev.render, cur.renderData - prev.renderData, Ago(audioRender), cur.motion - prev.motion));
+					cur.play, cur.feed - prev.feed, cur.render - prev.render, cur.renderData - prev.renderData, Ago(audioRender), cur.motion - prev.motion,
+					WiiPadJIT::ArenaReady() ? fmt::format(" | jit code {:.1f} MB", WiiPadJIT::ArenaUsed() / (1024.0 * 1024.0)) : std::string()));
 			}
 			prev = cur;
 			prevT = t;

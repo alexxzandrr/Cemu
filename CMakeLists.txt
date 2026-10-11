@@ -137,13 +137,9 @@ option(ENABLE_VULKAN "Enables the Vulkan backend" ON)
 option(ENABLE_METAL "Enables the Metal backend" ${ENABLE_METAL_DEFAULT})
 option(ENABLE_DISCORD_RPC "Enables the Discord Rich Presence feature" ON)
 
-# AArch64 PPC recompiler (JIT) backend. Off for iOS: WiiPad is interpreter-only until executable memory is
-# solved there, and the backend's global code generators allocate MAP_JIT memory at load time (see docs/ipados).
-if (CEMU_IOS)
-	set(ENABLE_AARCH64_RECOMPILER_DEFAULT OFF)
-else()
-	set(ENABLE_AARCH64_RECOMPILER_DEFAULT ON)
-endif()
+# AArch64 PPC recompiler (JIT) backend. On iOS (WiiPad) its code goes into an executable arena prepared through
+# StikDebug (src/ios/WiiPadJIT, docs/ipados/PHASE3.md); without that arena WiiPad falls back to the interpreter.
+set(ENABLE_AARCH64_RECOMPILER_DEFAULT ON)
 option(ENABLE_AARCH64_RECOMPILER "Build the AArch64 PPC recompiler backend (ARM64 hosts only)" ${ENABLE_AARCH64_RECOMPILER_DEFAULT})
 
 if (ENABLE_METAL AND NOT APPLE)

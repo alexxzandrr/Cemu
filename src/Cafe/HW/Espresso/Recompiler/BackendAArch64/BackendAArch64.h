@@ -8,6 +8,15 @@ void PPCRecompiler_cleanupAArch64Code(void* code, size_t size);
 
 void PPCRecompilerAArch64Gen_generateRecompilerInterfaceFunctions();
 
+#if BOOST_OS_IOS
+// iPadOS: a process cannot make its own memory executable. The platform layer (src/ios/WiiPadJIT) prepares an
+// executable arena with a debugger's help and installs this hook: it copies finished, position-independent code into
+// the arena (through a writable alias) and returns the address to execute it at, or nullptr if the arena is full or
+// missing. Generated blocks only use PC-relative branches internally; everything else goes through absolute addresses
+// or the jump table, so a block can be built in a heap buffer and moved.
+extern void* (*g_aarch64CommitCode)(const void* code, size_t size);
+#endif
+
 // architecture specific constants
 namespace IMLArchAArch64
 {

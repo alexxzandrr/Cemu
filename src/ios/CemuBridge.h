@@ -63,10 +63,10 @@ typedef NS_ENUM(NSInteger, WiiPadButton) {
 /// Returns the title name. One title per app session.
 - (nullable NSString *)launchTitleAtURL:(NSURL *)url error:(NSError **)error;
 
-/// Experimental: run the three Wii U cores on three host threads with Cemu's multi-core interpreter
-/// (desktop option --force-multicore-interpreter) instead of time-slicing them on one thread. Read when a title is
+/// Run the three Wii U cores on three host threads (multi-core recompiler with JIT, otherwise Cemu's multi-core
+/// interpreter, desktop --force-multicore-interpreter) instead of time-slicing them on one. Read when a title is
 /// launched; stored across launches.
-@property (nonatomic) BOOL multicoreInterpreter;
+@property (nonatomic) BOOL multicoreCPU;
 
 /// Cemu's "async shader compile" option (default YES). NO: emulation waits for each new shader instead of skipping the
 /// draw until it is compiled, so nothing pops in but new scenes hitch. Read when a title is launched; stored across launches.
@@ -94,16 +94,19 @@ typedef NS_ENUM(NSInteger, WiiPadButton) {
 /// Resets GamePad motion (iPad gyroscope/accelerometer): the current pose becomes the starting pose.
 - (void)recenterMotion;
 
-// --- Phase 3 Gate 0: JIT feasibility (WiiPadJIT). Independent of the core; usable before a title is launched. ---
+// --- JIT (Phase 3, WiiPadJIT). Independent of the core; enable before launching a title. ---
 
-/// One line: whether the app is signed with get-task-allow and whether a debugger (StikDebug) is attached.
+/// One line: JIT state (arena size and use), or signing and debugger state while JIT is off.
 @property (nonatomic, readonly) NSString *jitStatus;
-/// YES once a debugger is attached (CS_DEBUGGED), i.e. the Gate 0 test may run.
+/// YES once a debugger is attached (CS_DEBUGGED; stays set after the detach).
 @property (nonatomic, readonly) BOOL jitDebuggerAttached;
-/// Runs the Gate 0 test (StikDebug breakpoint protocol: executable region + writable alias, then generated code).
-/// Blocking; call off the main thread. Does nothing unless a debugger is attached. `detach`: also detach the
-/// debugger and run the code again (may end WiiPad if execution does not survive the detach). Details in WiiPad.log.
-- (NSString *)runJITGate0Detaching:(BOOL)detach;
+/// YES once the JIT code arena is ready (this app session).
+@property (nonatomic, readonly) BOOL jitReady;
+/// With StikDebug attached: prepares the executable code arena, self-tests it and detaches the debugger.
+/// Blocking; call off the main thread. Returns a short result line; details in WiiPad.log ("jit:" lines).
+- (NSString *)enableJIT;
+/// Use Cemu's recompiler when JIT is enabled (default YES). Read when a title is launched; stored across launches.
+@property (nonatomic) BOOL useJIT;
 
 /// Writes an app-side event into WiiPad.log.
 - (void)log:(NSString *)message;

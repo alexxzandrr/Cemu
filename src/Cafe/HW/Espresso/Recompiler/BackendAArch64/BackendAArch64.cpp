@@ -58,12 +58,40 @@ static const GPReg LR{TEMP_GPR_2_ID};
 
 static const FPReg TEMP_FPR{TEMP_FPR_ID};
 
+#if BOOST_OS_IOS
+void* (*g_aarch64CommitCode)(const void* code, size_t size) = nullptr;
+
+// Not a static object: xbyak's Apple CPU probe throws if one of its sysctls is missing, and a throw during static
+// initialization would end WiiPad at launch even in interpreter mode. Every iPad that runs WiiPad has LSE atomics.
+static bool CpuHasAtomics()
+{
+	static const bool hasAtomics = [] {
+		try
+		{
+			return util::Cpu().isAtomicSupported();
+		}
+		catch (...)
+		{
+			return true;
+		}
+	}();
+	return hasAtomics;
+}
+#else
 static const util::Cpu s_cpu;
+static bool CpuHasAtomics()
+{
+	return s_cpu.isAtomicSupported();
+}
+#endif
 
 class AArch64Allocator : public Allocator
 {
   private:
-#ifdef XBYAK_USE_MMAP_ALLOCATOR
+#if BOOST_OS_IOS
+	// plain heap buffer (MAP_JIT is not allowed); finished code is copied into the JIT arena (g_aarch64CommitCode)
+	inline static Allocator s_allocator;
+#elif defined(XBYAK_USE_MMAP_ALLOCATOR)
 	inline static MmapAllocator s_allocator;
 #else
 	inline static Allocator s_allocator;
@@ -93,7 +121,11 @@ class AArch64Allocator : public Allocator
 
 	[[nodiscard]] bool useProtect() const override
 	{
+#if BOOST_OS_IOS
+		return false; // never mprotect: the heap buffer stays RW, execution happens in the arena
+#else
 		return !m_freeDisabled && m_allocatorImpl->useProtect();
+#endif
 	}
 };
 
@@ -1135,7 +1167,7 @@ void AArch64GenContext_t::atomic_cmp_store(IMLInstruction* imlInstruction)
 	WReg valReg = gpReg<WReg>(imlInstruction->op_atomic_compare_store.regWriteValue);
 	WReg cmpValReg = gpReg<WReg>(imlInstruction->op_atomic_compare_store.regCompareValue);
 
-	if (s_cpu.isAtomicSupported())
+	if (CpuHasAtomics())
 	{
 		mov(TEMP_GPR2.WReg, cmpValReg);
 		add(TEMP_GPR1.XReg, MEM_BASE_REG, eaReg, ExtMod::UXTW);
@@ -1665,6 +1697,16 @@ bool PPCRecompiler_generateAArch64Code(struct PPCRecFunction_t* PPCRecFunction, 
 
 	aarch64GenContext.readyRE();
 
+#if BOOST_OS_IOS
+	// move the finished code into the JIT arena; the heap buffer is freed with the generator
+	void* code = g_aarch64CommitCode ? g_aarch64CommitCode(aarch64GenContext.getCode(), codeSize) : nullptr;
+	if (!code)
+		return false; // arena full or missing: this function keeps running in the interpreter
+	PPCRecFunction->x86Code = code;
+	PPCRecFunction->x86Size = codeSize;
+	return true;
+#endif
+
 	// set code
 	PPCRecFunction->x86Code = aarch64GenContext.getCode<void*>();
 	PPCRecFunction->x86Size = aarch64GenContext.getMaxSize();
@@ -1675,6 +1717,9 @@ bool PPCRecompiler_generateAArch64Code(struct PPCRecFunction_t* PPCRecFunction, 
 
 void PPCRecompiler_cleanupAArch64Code(void* code, size_t size)
 {
+#if BOOST_OS_IOS
+	return; // code lives in the JIT arena (bump-allocated, never freed, like the x64 backend's code blocks)
+#endif
 	AArch64Allocator allocator;
 	if (allocator.useProtect())
 		CodeArray::protect(code, size, CodeArray::PROTECT_RW);
@@ -1725,6 +1770,30 @@ void AArch64GenContext_t::leaveRecompilerCode()
 }
 
 bool initializedInterfaceFunctions = false;
+#if BOOST_OS_IOS
+// no global generators on iOS: their default allocator would mmap MAP_JIT memory at load time, which fails
+template<typename TGen>
+static void* CommitInterfaceFunction(TGen emit)
+{
+	AArch64Allocator allocator;
+	AArch64GenContext_t ctx{&allocator};
+	emit(ctx);
+	ctx.readyRE();
+	void* code = g_aarch64CommitCode ? g_aarch64CommitCode(ctx.getCode(), ctx.getSize()) : nullptr;
+	cemu_assert(code != nullptr);
+	return code;
+}
+
+void PPCRecompilerAArch64Gen_generateRecompilerInterfaceFunctions()
+{
+	if (initializedInterfaceFunctions)
+		return;
+	initializedInterfaceFunctions = true;
+	PPCRecompiler_enterRecompilerCode = (decltype(PPCRecompiler_enterRecompilerCode))CommitInterfaceFunction([](AArch64GenContext_t& c) { c.enterRecompilerCode(); });
+	PPCRecompiler_leaveRecompilerCode_unvisited = (decltype(PPCRecompiler_leaveRecompilerCode_unvisited))CommitInterfaceFunction([](AArch64GenContext_t& c) { c.leaveRecompilerCode(); });
+	PPCRecompiler_leaveRecompilerCode_visited = (decltype(PPCRecompiler_leaveRecompilerCode_visited))CommitInterfaceFunction([](AArch64GenContext_t& c) { c.leaveRecompilerCode(); });
+}
+#else
 AArch64GenContext_t enterRecompilerCode_ctx{};
 
 AArch64GenContext_t leaveRecompilerCode_unvisited_ctx{};
@@ -1747,3 +1816,4 @@ void PPCRecompilerAArch64Gen_generateRecompilerInterfaceFunctions()
 	leaveRecompilerCode_visited_ctx.readyRE();
 	PPCRecompiler_leaveRecompilerCode_visited = leaveRecompilerCode_visited_ctx.getCode<decltype(PPCRecompiler_leaveRecompilerCode_visited)>();
 }
+#endif

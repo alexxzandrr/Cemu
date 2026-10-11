@@ -84,6 +84,10 @@ public:
 
 	// cpu
 	[[nodiscard]] static CPUMode GetCPUMode();
+#if BOOST_OS_IOS
+	// WiiPad: CPU mode for the next title launch (set before CafeSystem::PrepareForegroundTitle)
+	static void SetIOSCPUMode(CPUMode mode);
+#endif
 	[[nodiscard]] static uint8 GetTimerShiftFactor();
 
 	static void SetTimerShiftFactor(uint8 shiftFactor);
@@ -132,6 +136,9 @@ private:
 	inline static bool s_dump_libcurl_requests = false;
 
 	// timer speed
+#if BOOST_OS_IOS
+	inline static CPUMode s_iosCPUMode = CPUMode::SinglecoreInterpreter;
+#endif
 	inline static uint8 s_timer_shift = 3; // right shift factor, 0 -> 8x, 3 -> 1x, 4 -> 0.5x
 
 	// debug
