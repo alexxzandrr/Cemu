@@ -4,6 +4,7 @@
 #include "WiiPadTouchController.h"
 #include "WiiPadDiagnostics.h"
 #include "WiiPadMotion.h"
+#include "WiiPadJIT.h"
 #include "audio/IAudioAPI.h"
 
 #include "Cafe/CafeSystem.h"
@@ -821,6 +822,21 @@ namespace
 	if (!_titleLaunched)
 		return;
 	WiiPadInput::SetTouch(down, x, y);
+}
+
+- (NSString*)jitStatus
+{
+	return [NSString stringWithUTF8String:WiiPadJIT::DescribeStatus().c_str()];
+}
+
+- (BOOL)jitDebuggerAttached
+{
+	return WiiPadJIT::GetCodeSignStatus().debugged;
+}
+
+- (NSString*)runJITGate0Detaching:(BOOL)detach
+{
+	return [NSString stringWithUTF8String:WiiPadJIT::RunGate0(detach).c_str()];
 }
 
 - (void)recenterMotion

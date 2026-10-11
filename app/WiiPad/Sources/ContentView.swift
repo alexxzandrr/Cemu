@@ -195,7 +195,7 @@ struct ContentView: View {
             VStack(alignment: .leading, spacing: 20) {
                 Text("WiiPad")
                     .font(.largeTitle.bold())
-                Text("Phase 2 · full-screen game view")
+                Text("Phase 3 · Gate 0 JIT test")
                     .foregroundStyle(.secondary)
 
                 VStack(alignment: .leading, spacing: 12) {
@@ -255,6 +255,10 @@ struct ContentView: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+
+                Divider()
+                JITTestSection()
+                Divider()
 
                 if model.finished {
                     Button(model.shutDown ? "Core shut down" : "Shut down core") {

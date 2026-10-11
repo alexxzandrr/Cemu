@@ -94,6 +94,17 @@ typedef NS_ENUM(NSInteger, WiiPadButton) {
 /// Resets GamePad motion (iPad gyroscope/accelerometer): the current pose becomes the starting pose.
 - (void)recenterMotion;
 
+// --- Phase 3 Gate 0: JIT feasibility (WiiPadJIT). Independent of the core; usable before a title is launched. ---
+
+/// One line: whether the app is signed with get-task-allow and whether a debugger (StikDebug) is attached.
+@property (nonatomic, readonly) NSString *jitStatus;
+/// YES once a debugger is attached (CS_DEBUGGED), i.e. the Gate 0 test may run.
+@property (nonatomic, readonly) BOOL jitDebuggerAttached;
+/// Runs the Gate 0 test (StikDebug breakpoint protocol: executable region + writable alias, then generated code).
+/// Blocking; call off the main thread. Does nothing unless a debugger is attached. `detach`: also detach the
+/// debugger and run the code again (may end WiiPad if execution does not survive the detach). Details in WiiPad.log.
+- (NSString *)runJITGate0Detaching:(BOOL)detach;
+
 /// Writes an app-side event into WiiPad.log.
 - (void)log:(NSString *)message;
 

@@ -9,6 +9,7 @@
 #   - WiiPadTouchController.cpp : on-screen controls as a Cemu input device for the emulated GamePad (VPAD)
 #   - WiiPadMotion.mm     : iPad gyroscope/accelerometer (Core Motion) as GamePad motion
 #   - IOSAudioAPI.mm      : IAudioAPI backend (RemoteIO AudioUnit), registered in audio/IAudioAPI.cpp
+#   - WiiPadJIT.mm        : Phase 3 Gate 0 JIT feasibility test (StikDebug breakpoint protocol, iOS 26+ TXM)
 #   - ../main.cpp         : provides CemuCommonInit(); its desktop main() is excluded on iOS
 #
 # CemuCore: every Cemu library plus the vcpkg dependencies merged into one libCemuCore.a,
@@ -31,6 +32,8 @@ add_library(WiiPadPlatform STATIC
 	WiiPadMotion.mm
 	WiiPadDiagnostics.h
 	WiiPadDiagnostics.mm
+	WiiPadJIT.h
+	WiiPadJIT.mm
 )
 
 cemu_use_precompiled_header(WiiPadPlatform)
