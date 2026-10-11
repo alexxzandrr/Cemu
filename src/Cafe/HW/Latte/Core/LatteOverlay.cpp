@@ -475,22 +475,35 @@ void LatteOverlay_RenderNotifications(ImVec2& position, ImVec2& pivot, sint32 di
 	ImGui::PopFont();
 }
 
+#if BOOST_OS_IOS
+static std::atomic<float> s_overlayTopInset{ 0.0f };
+void LatteOverlay_setTopInset(float pixels)
+{
+	s_overlayTopInset = pixels;
+}
+#endif
+
 void LatteOverlay_translateScreenPosition(ScreenPosition pos, const Vector2f& window_size, ImVec2& position, ImVec2& pivot, sint32& direction)
 {
+#if BOOST_OS_IOS
+	const float top = 10.0f + s_overlayTopInset.load();
+#else
+	const float top = 10.0f;
+#endif
 	switch (pos)
 	{
 	case ScreenPosition::kTopLeft:
-		position = { 10, 10 };
+		position = { 10, top };
 		pivot = { 0, 0 };
 		direction = 1;
 		break;
 	case ScreenPosition::kTopCenter:
-		position = { window_size.x / 2.0f, 10 };
+		position = { window_size.x / 2.0f, top };
 		pivot = { 0.5f, 0 };
 		direction = 1;
 		break;
 	case ScreenPosition::kTopRight:
-		position = { window_size.x - 10, 10 };
+		position = { window_size.x - 10, top };
 		pivot = { 1, 0 };
 		direction = 1;
 		break;

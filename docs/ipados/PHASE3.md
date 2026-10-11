@@ -79,3 +79,8 @@ async compilation Cemu skips draws until theirs is ready. Its filter (`IsAsyncPi
 with a depth attachment, which includes character models. After a relaunch the cache existed and the Inkling looked
 right. WiiPad now logs the cache state at title launch (`shader cache: EMPTY (first run since install) ...` or
 `shader cache: N files, X MB`) and says explicitly when Documents was empty at startup.
+
+Device follow-up: the tutorial scene also came up as a yellow/green wash without level geometry on that first run; a
+relaunch (warm cache) fixed it as well. Both first-run glitches are async pipeline compilation on an empty cache, not
+the recompiler. Data loss on install: Sideloadly keeps the data container when a build is installed over the existing
+app (same Apple ID, unchanged bundle ID); deleting WiiPad first wipes `mlc01` saves and `shaderCache`.

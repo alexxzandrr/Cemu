@@ -39,3 +39,10 @@ removed (only visibility and hit testing change) and the hidden state is no long
 
 - Controls overlap the picture (by design, translucent); no layout editor yet.
 - Single-touch on the game view (as in 2B).
+
+## Cemu notifications moved below the toolbar
+
+Cemu's notifications ("Compiled N new shaders…") default to the top left, where they covered ZL/L. Every corner and
+centre position has an on-screen control, so at title launch WiiPad sets `notification.position` to top centre (in
+memory) and `LatteOverlay_setTopInset` (iOS-only, `LatteOverlay.cpp`) moves top-anchored overlays 60 pt down, below the
+toolbar, into the letterbox bar of a landscape iPad.

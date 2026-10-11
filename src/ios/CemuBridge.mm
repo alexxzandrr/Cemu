@@ -768,6 +768,12 @@ namespace
 
 		LogShaderCacheState();
 
+		// Cemu's notifications ("Compiled N new shaders…") default to the top left, under ZL/L. Every corner and centre
+		// has an on-screen control, so put them top centre, below the toolbar (GamePadOverlay: up to ~52 pt tall), which
+		// lands in the letterbox bar on a landscape iPad. In memory only.
+		GetConfig().notification.position = ScreenPosition::kTopCenter;
+		LatteOverlay_setTopInset((float)(60.0 * WindowSystem::GetWindowDPIScale()));
+
 		// --- CPU emulation: decided before PrepareForegroundTitle, which calls PPCRecompiler_init ---
 		const bool multicore = self.multicoreCPU;
 		if (WiiPadJIT::ArenaReady() && self.useJIT)
