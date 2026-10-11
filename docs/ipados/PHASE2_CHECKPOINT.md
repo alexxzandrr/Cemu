@@ -15,7 +15,7 @@ folder), build `3617616`, before the cleanup in this checkpoint.
 | Tilt (2D) | works | iPad gyroscope/accelerometer → GamePad motion, Recenter button (`PHASE2D.md`) |
 | Game view (2E) | new, not yet device-tested | full-screen game view, translucent GamePad controls over it, follows rotation (`PHASE2E.md`) |
 | JIT gate (3, Gate 0) | passed | generated code runs via StikDebug `universal.js` on iPadOS 27.2, also after detach (`PHASE3_GATE0.md`) |
-| Recompiler (3) | built, not yet device-tested | Cemu's AArch64 recompiler on a StikDebug-prepared JIT arena, interpreter fallback (`PHASE3.md`) |
+| Recompiler (3) | works: full speed in Splatoon gameplay (single-core); character rendering glitch and ~1 s hitches open | Cemu's AArch64 recompiler on a StikDebug-prepared JIT arena, interpreter fallback (`PHASE3.md`) |
 | CPU (without JIT) | interpreter | single-core (default) or multi-core interpreter (switch before loading a title); no JIT yet |
 
 ## Fibers on iOS: two root causes, both fixed in `FiberIOS.cpp`

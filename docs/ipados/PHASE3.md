@@ -48,3 +48,25 @@ No change to Cemu's recompiler logic itself, and none for desktop builds (all iO
 5. "Use the recompiler" off → interpreter in the same build, for an A/B comparison.
 
 If WiiPad closes, send `WiiPad.previous.log`, `log.previous.txt` and any `*.crash.*` file.
+
+## Result: full speed in gameplay (build 03ba3c6, 2026-10-11, single-core recompiler)
+
+iPad Air 13" M3, iPadOS 27.2, Splatoon. JIT arena: 256 MB prepared in 1065 ms, 16384 pages touched in 43 ms, both
+self-tests passed, detach fine. No crash in ~4.5 minutes.
+
+| | Interpreter (Phase 2 baseline) | Single-core recompiler |
+| --- | --- | --- |
+| `VPADRead` per 10 s in gameplay (600 = 60 fps) | ~364 | **~600** (502–602) |
+| `OSSched[core=0]` | 100 % | 100 % (now mostly waiting on the game's own frame pacing) |
+| `LatteThread` (GPU) | ~99 % | 55–65 %, rising to ~95 % in heavier scenes (t ≥ 220 s) |
+| JIT code | — | 18 MB after boot, 33.5 MB after 4 min (of 256 MB) |
+
+Open issues from this run:
+
+- **Character rendering looks wrong** (the Inkling). Not yet known whether the recompiler or the renderer causes it:
+  needs the same scene with "Use the recompiler" off.
+- **~1 s hitches.** The heartbeat shows dips when new code is compiled (e.g. +210 s: `PPCRecompiler` +0.46 s CPU,
+  JIT code 29.2 → 33.1 MB, `VPADRead` 382). While a function is being recompiled it runs in the interpreter.
+  New shaders (async compilation) are the other candidate. The 10 s heartbeat is too coarse to separate the two;
+  `+22..28 s` (`VPADRead` 55, 0, 1, 20) is most likely a loading screen.
+- The GPU thread approaches 100 % in heavier scenes: the next bottleneck after the CPU.
