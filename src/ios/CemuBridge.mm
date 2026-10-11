@@ -597,6 +597,34 @@ namespace
 	}
 }
 
+- (void)gameViewDidResize:(UIView*)view
+{
+	// No _mutex: launchTitle holds it off the main thread for seconds. _rendererInitialized only changes on the
+	// main thread, and the window sizes are atomics read by the GPU thread (same as the desktop resize handlers).
+	if (![NSThread isMainThread] || !_rendererInitialized || !g_renderer)
+		return;
+	CGSize points = view.bounds.size;
+	if (points.width < 1 || points.height < 1)
+		return;
+	CGFloat scale = view.traitCollection.displayScale > 0 ? view.traitCollection.displayScale : 2.0;
+
+	auto& windowInfo = WindowSystem::GetWindowInfo();
+	const int w = (int)points.width;
+	const int h = (int)points.height;
+	if (windowInfo.width == w && windowInfo.height == h && windowInfo.dpi_scale == (double)scale)
+		return;
+
+	// wxgui MainWindow::OnSizeEvent + MetalCanvas::OnResize
+	windowInfo.width = w;
+	windowInfo.height = h;
+	windowInfo.phys_width = (int)(points.width * scale);
+	windowInfo.phys_height = (int)(points.height * scale);
+	windowInfo.dpi_scale = scale;
+	MetalRenderer::GetInstance()->ResizeLayer({ w, h }, true);
+	WiiPadLog::Write(fmt::format("game view resized: {}x{} pt ({}x{} px)", w, h,
+		windowInfo.phys_width.load(), windowInfo.phys_height.load()));
+}
+
 - (BOOL)multicoreInterpreter
 {
 	return [NSUserDefaults.standardUserDefaults boolForKey:kMulticoreInterpreterKey];

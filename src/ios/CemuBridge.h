@@ -49,6 +49,11 @@ typedef NS_ENUM(NSInteger, WiiPadButton) {
 /// Requires initializeCore first.
 - (BOOL)initializeRendererInView:(UIView *)view error:(NSError **)error;
 
+/// Call when the view passed to initializeRendererInView: changes size (layout, rotation, Split View). Updates
+/// Cemu's window size (output scaling, touch mapping) and the CAMetalLayer drawable, like the desktop window's
+/// resize handlers. Main thread only; no-op before the renderer exists or when the size is unchanged.
+- (void)gameViewDidResize:(UIView *)view;
+
 /// Hands a user-selected Wii U title to Cemu's existing title-loading/boot path
 /// (TitleInfo -> CafeTitleList -> CafeSystem::PrepareForegroundTitle -> CafeSystem::LaunchForegroundTitle).
 /// `url` comes from the Files picker and may be security-scoped; access is held for the rest of the session

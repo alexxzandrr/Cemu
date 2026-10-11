@@ -13,6 +13,7 @@ folder), build `3617616`, before the cleanup in this checkpoint.
 | Input (2B) | works | on-screen GamePad controls + game-view touch → GamePad touchscreen (`PHASE2B_2C.md`) |
 | Audio (2C) | works | TV audio via RemoteIO AudioUnit, real time (48 kHz) |
 | Tilt (2D) | works | iPad gyroscope/accelerometer → GamePad motion, Recenter button (`PHASE2D.md`) |
+| Game view (2E) | new, not yet device-tested | full-screen game view, translucent GamePad controls over it, follows rotation (`PHASE2E.md`) |
 | CPU | interpreter | single-core (default) or multi-core interpreter (switch before loading a title); no JIT yet |
 
 ## Fibers on iOS: two root causes, both fixed in `FiberIOS.cpp`
@@ -63,5 +64,5 @@ a fiber and back, entry parameter check) stays; the ucontext self-test was remov
 
 - Speed: ~55–60% in gameplay (interpreter only).
 - No GamePad (DRC) audio; audio does not resume after an interruption.
-- One title per session; stop it by closing WiiPad from the app switcher. 480×270 game view, landscape controls.
+- One title per session; stop it by closing WiiPad from the app switcher.
 - No microphone, no Home menu, no hardware controllers; shared system fonts not bundled (placeholder font).

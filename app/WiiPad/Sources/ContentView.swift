@@ -2,9 +2,9 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Diagnostic screen (Phase 1B/2A/2B): initializes the Cemu core and the Metal renderer through CemuBridge,
-/// lets the user hand a Wii U title from the Files app to Cemu's boot path, then shows minimal
-/// on-screen GamePad controls. Not the real UI.
+/// Setup screen (Phase 1B/2A/2B/2E): initializes the Cemu core and the Metal renderer through CemuBridge,
+/// lets the user hand a Wii U title from the Files app to Cemu's boot path, then shows the game full screen
+/// with translucent on-screen GamePad controls over it. Not the final UI.
 @MainActor
 final class BootModel: ObservableObject {
     enum StepState { case pending, running, ok, failed }
@@ -63,6 +63,8 @@ final class BootModel: ObservableObject {
         steps[1].state = .running
         do {
             try CemuBridge.shared.initializeRenderer(in: hostView)
+            // the view may have been laid out again while the core was initializing
+            CemuBridge.shared.gameViewDidResize(hostView)
             steps[1].state = .ok
         } catch {
             steps[1].state = .failed
@@ -124,7 +126,13 @@ final class BootModel: ObservableObject {
 
 /// UIView that hosts the CAMetalLayer created by the Cemu renderer (the layer's own view ignores touches).
 /// Touches on it are forwarded to Cemu as GamePad touchscreen input (Phase 2B), normalized to [0, 1].
+/// It fills the screen; size changes (rotation, Split View) are passed to Cemu (Phase 2E).
 final class GameSurfaceView: UIView {
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        CemuBridge.shared.gameViewDidResize(self)
+    }
+
     private func forward(_ touches: Set<UITouch>, down: Bool) {
         guard let touch = touches.first, bounds.width > 0, bounds.height > 0 else { return }
         let p = touch.location(in: self)
@@ -158,14 +166,38 @@ struct ContentView: View {
     @State private var asyncShaderCompile = CemuBridge.shared.asyncShaderCompile
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("WiiPad")
-                .font(.largeTitle.bold())
-            Text("Phase 2 · shader cache")
-                .foregroundStyle(.secondary)
+        // The Metal host view is always the first child of this ZStack, full screen, so SwiftUI never recreates it
+        // (that would detach Cemu's CAMetalLayer). Before launch the setup panel covers it (nothing is rendered yet);
+        // while a title runs the GamePad overlay sits on top and touches that miss a control reach the game view.
+        ZStack {
+            MetalHostView { view in model.start(hostView: view) }
+                .ignoresSafeArea()
 
-            // hidden while a title runs, to make room for the controls
-            if !model.titleLaunched {
+            if model.titleLaunched {
+                GamePadOverlay()
+            } else {
+                setupPanel
+            }
+        }
+        .background(Color.black.ignoresSafeArea())
+        .preferredColorScheme(.dark)
+        .statusBarHidden(model.titleLaunched)
+        .persistentSystemOverlays(model.titleLaunched ? .hidden : .automatic)
+        // edge swipes (Control Center, Notification Center, Home) need a second swipe while playing
+        .defersSystemGestures(on: model.titleLaunched ? .all : [])
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: importerTypes) { result in
+            model.pickerFinished(result)
+        }
+    }
+
+    private var setupPanel: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                Text("WiiPad")
+                    .font(.largeTitle.bold())
+                Text("Phase 2 · full-screen game view")
+                    .foregroundStyle(.secondary)
+
                 VStack(alignment: .leading, spacing: 12) {
                     ForEach(model.steps) { step in
                         HStack(alignment: .firstTextBaseline, spacing: 10) {
@@ -175,90 +207,71 @@ struct ContentView: View {
                                 if !step.detail.isEmpty {
                                     Text(step.detail)
                                         .font(.footnote)
-                                        .foregroundStyle(.red)
+                                        .foregroundStyle(step.state == .failed ? .red : .secondary)
                                 }
                             }
                         }
                     }
                 }
-            }
 
-            // The Metal host view keeps the same position in this HStack in every state, so SwiftUI never
-            // recreates it (that would detach Cemu's CAMetalLayer). The GamePad controls appear beside it.
-            HStack(alignment: .center, spacing: 28) {
-                if model.titleLaunched {
-                    GamePadLeftPanel()
-                }
-                MetalHostView { view in model.start(hostView: view) }
-                    .frame(width: 480, height: 270)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                if model.titleLaunched {
-                    GamePadRightPanel()
-                }
-            }
-            .frame(maxWidth: .infinity, alignment: model.titleLaunched ? .center : .leading)
-
-            if model.readyForTitle && !model.titleLaunched {
-                HStack(spacing: 12) {
-                    Button("Choose title folder…") {
-                        model.pickerOpened("folder")
-                        importerTypes = [.folder]
-                        showImporter = true
-                    }
-                    Button("Choose title file…") {
-                        model.pickerOpened("file")
-                        importerTypes = [.item]
-                        showImporter = true
-                    }
-                    if let saved = model.savedTitle {
-                        Button("Reopen \(saved.lastPathComponent)") {
-                            CemuBridge.shared.log("title selected from saved bookmark")
-                            model.launchTitle(saved)
+                if model.readyForTitle {
+                    HStack(spacing: 12) {
+                        Button("Choose title folder…") {
+                            model.pickerOpened("folder")
+                            importerTypes = [.folder]
+                            showImporter = true
+                        }
+                        Button("Choose title file…") {
+                            model.pickerOpened("file")
+                            importerTypes = [.item]
+                            showImporter = true
+                        }
+                        if let saved = model.savedTitle {
+                            Button("Reopen \(saved.lastPathComponent)") {
+                                CemuBridge.shared.log("title selected from saved bookmark")
+                                model.launchTitle(saved)
+                            }
                         }
                     }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(model.loadingTitle)
+                    Text("Folder: an extracted title's root (with code, content and meta). File: .wua, .wud, .wux, .wuhb or a homebrew .rpx. Disc images also need keys.txt in WiiPad's folder.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Toggle("Multi-core interpreter (experimental: three host threads for the three Wii U cores)", isOn: $multicoreInterpreter)
+                        .font(.footnote)
+                        .onChange(of: multicoreInterpreter) { enabled in
+                            CemuBridge.shared.multicoreInterpreter = enabled
+                        }
+                    Toggle("Async shader compilation (on: smoother, but objects can be missing until their shaders compile; off: brief hitches, nothing missing)", isOn: $asyncShaderCompile)
+                        .font(.footnote)
+                        .onChange(of: asyncShaderCompile) { enabled in
+                            CemuBridge.shared.asyncShaderCompile = enabled
+                        }
+                    Text("Compiled shaders are kept in Files › On My iPad › WiiPad › shaderCache and precompiled on the loading screen of the next launch.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Text("The game runs full screen with translucent GamePad controls. Touches that miss a control are GamePad touchscreen input. To stop a title, close WiiPad from the app switcher.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(model.loadingTitle)
-                Text("Folder: an extracted title's root (with code, content and meta). File: .wua, .wud, .wux, .wuhb or a homebrew .rpx. Disc images also need keys.txt in WiiPad's folder.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                Toggle("Multi-core interpreter (experimental: three host threads for the three Wii U cores)", isOn: $multicoreInterpreter)
-                    .font(.footnote)
-                    .frame(maxWidth: 620)
-                    .onChange(of: multicoreInterpreter) { enabled in
-                        CemuBridge.shared.multicoreInterpreter = enabled
+
+                if model.finished {
+                    Button(model.shutDown ? "Core shut down" : "Shut down core") {
+                        model.shutdown()
                     }
-                Toggle("Async shader compilation (on: smoother, but objects can be missing until their shaders compile; off: brief hitches, nothing missing)", isOn: $asyncShaderCompile)
-                    .font(.footnote)
-                    .frame(maxWidth: 620)
-                    .onChange(of: asyncShaderCompile) { enabled in
-                        CemuBridge.shared.asyncShaderCompile = enabled
-                    }
-                Text("Compiled shaders are kept in Files › On My iPad › WiiPad › shaderCache and precompiled on the loading screen of the next launch.")
+                    .disabled(model.shutDown || model.loadingTitle)
+                }
+
+                Text("Logs: Files › On My iPad › WiiPad › WiiPad.log (also log.txt, stdout.txt)")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-
-            if model.finished && !model.titleLaunched {
-                Button(model.shutDown ? "Core shut down" : "Shut down core") {
-                    model.shutdown()
-                }
-                .disabled(model.shutDown || model.loadingTitle)
-            } else if model.titleLaunched {
-                Text("A title is running. Touch the game view for GamePad touchscreen input; \"Pad view\" shows the GamePad screen there. To stop the title, close WiiPad from the app switcher.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-
-            Text("Logs: Files › On My iPad › WiiPad › WiiPad.log (also log.txt, stdout.txt)")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-            Spacer()
-        }
-        .padding(40)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .fileImporter(isPresented: $showImporter, allowedContentTypes: importerTypes) { result in
-            model.pickerFinished(result)
+            .padding(32)
+            .frame(maxWidth: 680, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial))
+            .padding(40)
+            .frame(maxWidth: .infinity)
         }
     }
 
