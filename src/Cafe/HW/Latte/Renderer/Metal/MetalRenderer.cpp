@@ -1,5 +1,11 @@
 #include "Cafe/HW/Latte/Renderer/Metal/MetalRenderer.h"
 #include "Cafe/HW/Latte/Renderer/Metal/MetalMemoryManager.h"
+
+#if BOOST_OS_IOS
+// WiiPad diagnostics (src/ios/WiiPadDiagnostics heartbeat): draws dropped by the Metal renderer
+std::atomic<uint32> g_wiipadMtlDrawsNoPipeline{0}; // pipeline not (yet) available: async compile pending, or creation failed
+std::atomic<uint32> g_wiipadMtlDrawsNoMesh{0};     // geometry shader draw without mesh shader support
+#endif
 #include "Cafe/HW/Latte/Renderer/Metal/LatteTextureMtl.h"
 #include "Cafe/HW/Latte/Renderer/Metal/LatteTextureViewMtl.h"
 #include "Cafe/HW/Latte/Renderer/Metal/RendererShaderMtl.h"
@@ -1177,7 +1183,12 @@ void MetalRenderer::draw_execute(uint32 baseVertex, uint32 baseInstance, uint32 
 
     bool usesGeometryShader = UseGeometryShader(LatteGPUState.contextNew, geometryShader != nullptr);
     if (usesGeometryShader && !m_supportsMeshShaders)
+    {
+#if BOOST_OS_IOS
+        g_wiipadMtlDrawsNoMesh++;
+#endif
         return;
+    }
 
     bool fetchVertexManually = (usesGeometryShader || fetchShader->mtlFetchVertexManually);
 
@@ -1215,7 +1226,12 @@ void MetalRenderer::draw_execute(uint32 baseVertex, uint32 baseInstance, uint32 
     // Render pipeline state
     PipelineObject* pipelineObj = m_pipelineCache->GetRenderPipelineState(fetchShader, vertexShader, geometryShader, pixelShader, m_state.m_lastUsedFBO.m_attachmentsInfo, m_state.m_activeFBO.m_attachmentsInfo, m_state.m_activeFBO.m_fbo->m_size, count, LatteGPUState.contextNew);
     if (!pipelineObj->m_pipeline)
+    {
+#if BOOST_OS_IOS
+        g_wiipadMtlDrawsNoPipeline++;
+#endif
         return;
+    }
 
     if (pipelineObj->m_pipeline != encoderState.m_renderPipelineState)
    	{

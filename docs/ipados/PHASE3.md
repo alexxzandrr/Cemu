@@ -101,3 +101,13 @@ up now.
 
 Fix: `MetalEncoderState::m_visibilityCounting` tracks the encoder's mode (reset with every new encoder, as Metal
 starts each encoder disabled); the first draw after a query ends sets `VisibilityResultModeDisabled`.
+
+### Open: characters invisible on the first launch after an install, even with async compilation off
+
+Device report (2b77592): the light shafts are fixed, but on the first launch after installing, the Inklings on
+"Choose an Inkling!" are still missing their skin; after restarting WiiPad they are fine. With async compilation off,
+`MetalPipelineCache` compiles every pipeline synchronously, so the async explanation does not cover this. Diagnostic:
+the Metal renderer now counts draws it drops (`no pipeline`: pipeline missing or failed to compile; `no mesh shader`:
+geometry-shader draw without mesh shader support) and the heartbeat prints `DRAWS DROPPED: ...` when that happens.
+Pipeline and shader compile errors are in Cemu's `log.txt` (`error creating render pipeline state`, `failed to create
+library from source`).

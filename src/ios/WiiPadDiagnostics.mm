@@ -2,6 +2,24 @@
 #include "WiiPadLog.h"
 #include "WiiPadJIT.h"
 
+#include <atomic>
+// Cafe/HW/Latte/Renderer/Metal/MetalRenderer.cpp (BOOST_OS_IOS)
+extern std::atomic<uint32> g_wiipadMtlDrawsNoPipeline;
+extern std::atomic<uint32> g_wiipadMtlDrawsNoMesh;
+
+// draws the Metal renderer dropped since the previous heartbeat (empty when none)
+static std::string DroppedDraws()
+{
+	static uint32 lastNoPipeline = 0, lastNoMesh = 0;
+	const uint32 noPipeline = g_wiipadMtlDrawsNoPipeline.load(), noMesh = g_wiipadMtlDrawsNoMesh.load();
+	std::string s;
+	if (noPipeline != lastNoPipeline || noMesh != lastNoMesh)
+		s = fmt::format(" | DRAWS DROPPED: no pipeline +{}, no mesh shader +{}", noPipeline - lastNoPipeline, noMesh - lastNoMesh);
+	lastNoPipeline = noPipeline;
+	lastNoMesh = noMesh;
+	return s;
+}
+
 #include "Cafe/HW/Latte/Core/Latte.h"
 #include "Cafe/OS/libs/coreinit/coreinit_Scheduler.h"
 #include "Cafe/OS/libs/coreinit/coreinit_Thread.h"
@@ -362,7 +380,8 @@ namespace
 					t, hostLine, cur.sched - prev.sched, cur.vpad - prev.vpad, cur.vpad, Ago(vpadRead),
 					(uint32)LatteGPUState.gx2InitCalled, (uint32)LatteGPUState.flipCounter,
 					cur.play, cur.feed - prev.feed, cur.render - prev.render, cur.renderData - prev.renderData, Ago(audioRender), cur.motion - prev.motion,
-					WiiPadJIT::ArenaReady() ? fmt::format(" | jit code {:.1f} MB", WiiPadJIT::ArenaUsed() / (1024.0 * 1024.0)) : std::string()));
+					(WiiPadJIT::ArenaReady() ? fmt::format(" | jit code {:.1f} MB", WiiPadJIT::ArenaUsed() / (1024.0 * 1024.0)) : std::string())
+					+ DroppedDraws()));
 			}
 			prev = cur;
 			prevT = t;
