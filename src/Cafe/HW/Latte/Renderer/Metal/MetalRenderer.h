@@ -74,6 +74,8 @@ struct MetalEncoderState
    	uint32 m_depthSlope = 0;
    	uint32 m_depthClamp = 0;
     bool m_depthClipEnable = true;
+    // visibility result (occlusion query) counting is on for this encoder; Metal starts every encoder disabled
+    bool m_visibilityCounting = false;
     struct {
         MTL::Buffer* m_buffer;
         size_t m_offset;

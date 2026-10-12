@@ -1331,6 +1331,15 @@ void MetalRenderer::draw_execute(uint32 baseVertex, uint32 baseInstance, uint32 
 	{
 	    auto mode = (m_occlusionQuery.m_currentIndex == INVALID_UINT32 ? MTL::VisibilityResultModeDisabled : MTL::VisibilityResultModeCounting);
 	    renderCommandEncoder->setVisibilityResultMode(mode, m_occlusionQuery.m_currentIndex * sizeof(uint64));
+	    encoderState.m_visibilityCounting = (mode == MTL::VisibilityResultModeCounting);
+	}
+	else if (encoderState.m_visibilityCounting)
+	{
+	    // The query has ended, but the encoder would keep counting into the last offset, which is the first slot of the
+	    // next query: every draw between two queries in the same render pass was added to the next query's result.
+	    // Inflated results make occlusion-driven effects (e.g. Splatoon's light shafts) render at full intensity.
+	    renderCommandEncoder->setVisibilityResultMode(MTL::VisibilityResultModeDisabled, 0);
+	    encoderState.m_visibilityCounting = false;
 	}
 
 	// todo - how does culling behave with rects?

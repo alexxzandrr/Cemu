@@ -84,3 +84,20 @@ Device follow-up: the tutorial scene also came up as a yellow/green wash without
 relaunch (warm cache) fixed it as well. Both first-run glitches are async pipeline compilation on an empty cache, not
 the recompiler. Data loss on install: Sideloadly keeps the data container when a build is installed over the existing
 app (same Apple ID, unchanged bundle ID); deleting WiiPad first wipes `mlc01` saves and `shaderCache`.
+
+## Light shaft / "yellow screen" glitch: occlusion query leak in Cemu's Metal renderer
+
+Device recording (build 7b9ee29, async shader compilation off, recompiler): in the tutorial the light shafts flicker
+between correct translucent beams and solid over-bright wedges from frame to frame; the earlier full-screen yellow/green
+wash in the same room is the same effect. With async compilation off nothing is skipped, so this is not the shader cache.
+
+Cause (also in upstream Cemu `main`): `MetalRenderer::draw_execute` sets `setVisibilityResultMode(Counting, slot)` for
+draws inside an occlusion query, but never turns counting off when the query ends. The encoder keeps counting every
+later draw in the same render pass into the current slot, which is the first slot of the next query, so the next
+query reports far too many visible samples. Splatoon scales its light shafts by such a query (light source visibility),
+so they render at full intensity. Whether the next query lands in the same render pass depends on where command
+buffers are committed, so it flickers. Faster emulation (recompiler) changes that timing, which is likely why it showed
+up now.
+
+Fix: `MetalEncoderState::m_visibilityCounting` tracks the encoder's mode (reset with every new encoder, as Metal
+starts each encoder disabled); the first draw after a query ends sets `VisibilityResultModeDisabled`.
