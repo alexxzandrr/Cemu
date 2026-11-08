@@ -5,6 +5,10 @@
 //#include "ax.h"
 #include "config/CemuConfig.h"
 
+#if BOOST_OS_IOS
+namespace coreinit { extern std::atomic<bool> g_iosTitlePaused; } // coreinit_Thread.cpp, set by WiiPad's pause
+#endif
+
 namespace snd_core
 {
 	uint32 numProcessedFrames = 0;
@@ -477,6 +481,11 @@ namespace snd_core
 	// called periodically to check for AX updates
 	void AXOut_update()
 	{
+#if BOOST_OS_IOS
+		// paused (src/ios/WiiPadPause.cpp): keep the output stopped; this update would restart it once the queue drains
+		if (coreinit::g_iosTitlePaused.load(std::memory_order_relaxed))
+			return;
+#endif
 		constexpr static auto kTimeout = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(((IAudioAPI::kBlockCount * 3) / 4) * (AX_FRAMES_PER_GROUP * 3)));
 		constexpr static auto kWaitDuration = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::milliseconds(3));
 		constexpr static auto kWaitDurationFast = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::microseconds(2900));

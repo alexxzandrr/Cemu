@@ -666,7 +666,6 @@ static float s_outputScale = 1.0f;
 		physW, physH, s_outputScale));
 }
 
-// Fills Cemu's pad-window sizes from `view` (desktop: PadViewFrame::OnSizeEvent).
 // Layer size in points for `view` after outputScale (the drawable is this times the display scale).
 static Vector2i ScaledLayerSize(UIView* view)
 {
@@ -674,6 +673,7 @@ static Vector2i ScaledLayerSize(UIView* view)
 	return { std::max(1, (int)lround(points.width * s_outputScale)), std::max(1, (int)lround(points.height * s_outputScale)) };
 }
 
+// Fills Cemu's pad-window sizes from `view` (desktop: PadViewFrame::OnSizeEvent).
 static void SetPadWindowSize(UIView* view)
 {
 	CGSize points = view.bounds.size;

@@ -85,11 +85,14 @@ namespace coreinit
 	std::condition_variable g_idleWaitCv;
 	std::atomic<uint32> g_idleWaitSeq{0};
 	std::atomic<sint32> g_idleWaiters{0};
+	// set by WiiPad's pause (src/ios/WiiPadPause.cpp): every guest thread is suspended, so idle waits can be longer
+	std::atomic<bool> g_iosTitlePaused{false};
 
 	void __OSIdleWaitWake()
 	{
-		g_idleWaitSeq.fetch_add(1, std::memory_order_release);
-		if (g_idleWaiters.load(std::memory_order_acquire) > 0)
+		// seq_cst: the waker's increment and the waiter's registration must not both read stale values
+		g_idleWaitSeq.fetch_add(1, std::memory_order_seq_cst);
+		if (g_idleWaiters.load(std::memory_order_seq_cst) > 0)
 		{
 			std::lock_guard lock(g_idleWaitMtx);
 			g_idleWaitCv.notify_all();
@@ -1282,12 +1285,13 @@ namespace coreinit
 		// single-core: one round visits all three cores, so allow three times the empty rounds before waiting
 		const uint32 idleSpinBudget = g_isMulticoreMode ? 24 : 72;
 		constexpr auto kIdleWaitTimeout = std::chrono::microseconds(250);
+		constexpr auto kPausedWaitTimeout = std::chrono::milliseconds(4); // resume wakes it at once
 		uint32 emptyRounds = 0;
 #endif
 		while (true)
 		{
 #if BOOST_OS_IOS
-			const uint32 wakeSeq = g_idleWaitSeq.load(std::memory_order_acquire);
+			const uint32 wakeSeq = g_idleWaitSeq.load(std::memory_order_seq_cst);
 			bool ranThread = false;
 #endif
 			if (!g_coreRunQueueThreadCount[coreIndex].isZero()) // avoid hammering the lock on the main core if there is no runable thread
@@ -1314,15 +1318,31 @@ namespace coreinit
 					emptyRounds = 0;
 				else if (++emptyRounds > idleSpinBudget)
 				{
-					g_idleWaiters.fetch_add(1, std::memory_order_acq_rel);
+					// Only wait when nothing is queued anywhere: in single-core mode the loop visits one core per round,
+					// and a thread queued for another core must not wait for a timeout first.
+					bool anyQueued = false;
+					if (g_isMulticoreMode)
+						anyQueued = !g_coreRunQueueThreadCount[coreIndex].isZero();
+					else
+						for (sint32 i = 0; i < PPC_CORE_COUNT; i++)
+							anyQueued |= !g_coreRunQueueThreadCount[i].isZero();
+					if (!anyQueued)
 					{
-						std::unique_lock lock(g_idleWaitMtx);
-						g_idleWaitCv.wait_for(lock, kIdleWaitTimeout, [wakeSeq]() {
-							return g_idleWaitSeq.load(std::memory_order_acquire) != wakeSeq ||
-								!sSchedulerActive.load(std::memory_order_relaxed);
-						});
+						bool woken;
+						g_idleWaiters.fetch_add(1, std::memory_order_seq_cst);
+						{
+							std::unique_lock lock(g_idleWaitMtx);
+							const auto timeout = g_iosTitlePaused.load(std::memory_order_relaxed) ? std::chrono::duration_cast<std::chrono::microseconds>(kPausedWaitTimeout) : kIdleWaitTimeout;
+							woken = g_idleWaitCv.wait_for(lock, timeout, [wakeSeq]() {
+								return g_idleWaitSeq.load(std::memory_order_seq_cst) != wakeSeq ||
+									!sSchedulerActive.load(std::memory_order_relaxed);
+							});
+						}
+						g_idleWaiters.fetch_sub(1, std::memory_order_seq_cst);
+						// woken by a newly runnable thread: visit every core again before the next wait
+						if (woken)
+							emptyRounds = 0;
 					}
-					g_idleWaiters.fetch_sub(1, std::memory_order_acq_rel);
 				}
 #endif
 			}

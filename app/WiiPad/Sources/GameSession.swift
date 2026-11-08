@@ -82,10 +82,12 @@ final class GameSession: ObservableObject {
         let shouldPause = !pauseReasons.isEmpty
         guard shouldPause != paused else { return }
         if shouldPause {
-            if CemuBridge.shared.pauseTitle(pauseReasons.sorted().joined(separator: ", ")) { paused = true }
+            _ = CemuBridge.shared.pauseTitle(pauseReasons.sorted().joined(separator: ", "))
         } else {
-            if CemuBridge.shared.resumeTitle(reason) { paused = false }
+            _ = CemuBridge.shared.resumeTitle(reason)
         }
+        // the core's state is the truth (a pause is refused before the title runs, a resume after it stopped)
+        paused = CemuBridge.shared.titlePaused
     }
 
     /// The Resume button: clears every pause reason except the app not being active.

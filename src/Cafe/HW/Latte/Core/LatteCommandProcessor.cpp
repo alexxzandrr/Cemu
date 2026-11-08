@@ -165,6 +165,10 @@ void LatteCP_signalEnterWait()
 * Read a U32 from the command buffer
 * If no data is available then wait in a busy loop
 */
+#if BOOST_OS_IOS
+namespace coreinit { extern std::atomic<bool> g_iosTitlePaused; } // coreinit_Thread.cpp, set by WiiPad's pause
+#endif
+
 uint32 LatteCP_readU32Deprc()
 {
 #if BOOST_OS_IOS
@@ -199,7 +203,8 @@ uint32 LatteCP_readU32Deprc()
 		LatteAsyncCommands_checkAndExecute();
 #if BOOST_OS_IOS
 		if (++idleRounds > 64)
-			std::this_thread::sleep_for(std::chrono::microseconds(idleRounds > 1024 ? 250 : 50));
+			std::this_thread::sleep_for(std::chrono::microseconds(idleRounds <= 1024 ? 50 :
+				(coreinit::g_iosTitlePaused.load(std::memory_order_relaxed) ? 2000 : 250)));
 		else
 			std::this_thread::yield();
 #else

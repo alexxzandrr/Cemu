@@ -7,12 +7,19 @@
 #include "Cafe/OS/libs/coreinit/coreinit_Thread.h"
 #include "Cafe/OS/libs/coreinit/coreinit_Scheduler.h"
 
+#include <atomic>
 #include <mutex>
 #include <vector>
 
 namespace snd_core
 {
 	void AXOut_updateDevicePlayState(bool isPlaying); // ax_out.cpp
+}
+
+namespace coreinit
+{
+	// coreinit_Thread.cpp (iOS): longer idle waits while paused; ax_out.cpp: no audio restarts while paused
+	extern std::atomic<bool> g_iosTitlePaused;
 }
 
 namespace
@@ -45,6 +52,7 @@ namespace WiiPadPause
 		srwlock_activeThreadList.UnlockRead();
 		__OSUnlockScheduler();
 
+		coreinit::g_iosTitlePaused.store(true);
 		snd_core::AXOut_updateDevicePlayState(false);
 		s_paused = true;
 		WiiPadLog::Write(fmt::format("pause: title paused ({}), {} guest threads suspended", reason, s_suspended.size()));
@@ -57,6 +65,7 @@ namespace WiiPadPause
 		if (!s_paused)
 			return false;
 		s_paused = false;
+		coreinit::g_iosTitlePaused.store(false);
 		if (!CafeSystem::IsTitleRunning())
 		{
 			s_suspended.clear();

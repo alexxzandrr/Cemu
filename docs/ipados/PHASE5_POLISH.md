@@ -12,8 +12,8 @@ is idle (waiting for vsync or the next GX2 command):
 
 | Loop | Before | Now (iOS only, `#if BOOST_OS_IOS`) |
 | --- | --- | --- |
-| CPU scheduler idle (`__OSThreadCoreIdle`, coreinit_Thread.cpp) | spins over the run queues and `__OSCheckSystemEvents` | after 24 (multi-core) / 72 (single-core) empty rounds, waits ≤ 250 µs on a condition variable; `__OSAddReadyThreadToRunQueue` wakes it at once |
-| GPU command wait (`LatteCP_readU32Deprc`) | `_mm_pause` + `yield` | after 64 rounds sleeps 50 µs, after 1024 rounds 250 µs |
+| CPU scheduler idle (`__OSThreadCoreIdle`, coreinit_Thread.cpp) | spins over the run queues and `__OSCheckSystemEvents` | after 24 (multi-core) / 72 (single-core) empty rounds, and only when no run queue holds a thread, waits ≤ 250 µs (4 ms while paused) on a condition variable; `__OSAddReadyThreadToRunQueue` wakes it at once |
+| GPU command wait (`LatteCP_readU32Deprc`) | `_mm_pause` + `yield` | after 64 rounds sleeps 50 µs, after 1024 rounds 250 µs (2 ms while paused) |
 | GPU wait for flip (`LatteCP_itHLEWaitForFlip`) | spins up to a whole frame | after 32 rounds sleeps in 100 µs steps |
 | GPU semaphore wait | yields after 2000 rounds | also sleeps 50 µs after 20000 rounds |
 
@@ -29,7 +29,8 @@ serious and Battery at critical, and restores it when the device cools (`heat:` 
 ## Pause
 
 `WiiPadPause` suspends every guest thread (Cemu's own suspend, as `OSSuspendThread` does) and stops audio; resume undoes
-exactly those suspends. With the idle waits above, a paused game uses almost no CPU. Pause holders (`GameSession`):
+exactly those suspends. `coreinit::g_iosTitlePaused` keeps `AXOut_update` from restarting the audio output and
+lengthens the idle waits while paused. With the idle waits above, a paused game uses almost no CPU. Pause holders (`GameSession`):
 the menu, the app not being active (Control Center, app switcher, Home), and iPhone Duo folded shut
 (`onHingeChange`, iOS 27.1; setting "Pause when iPhone Duo is closed"). The game runs while no holder remains.
 
@@ -47,3 +48,9 @@ the menu, the app not being active (Control Center, app switcher, Home), and iPh
 paused or not running.
 
 Also: `GCSupportsGameMode` (Game Mode) and the games app category in Info.plist.
+
+## Review
+
+An independent review of the diff (before device testing) found and this phase fixed: idle-wait latency in single-core
+mode (a thread queued for another core waited for a timeout), audio restarting during a pause, the pause UI state
+drifting from the core's, and too-frequent wakeups while paused.

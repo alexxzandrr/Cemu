@@ -111,6 +111,9 @@ final class LibraryStore: ObservableObject {
         if let png = info["icon"] as? Data, (try? png.write(to: iconFile(entry.id), options: .atomic)) != nil {
             entry.hasIcon = true
             icons[entry.id] = UIImage(data: png)
+        } else {
+            icons[entry.id] = nil
+            try? FileManager.default.removeItem(at: iconFile(entry.id))
         }
         entries.append(entry)
         save()
