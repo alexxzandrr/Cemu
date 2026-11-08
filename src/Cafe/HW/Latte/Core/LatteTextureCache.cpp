@@ -351,6 +351,16 @@ void LatteTexture_Delete(LatteTexture* texture)
  * Checks if the texture can be dropped from the cache and if yes, delete it
  * Returns true if the texture was deleted
  */
+#if BOOST_OS_IOS
+// iPhone/iPad: the app's memory limit is the device's unified memory budget (about 3.4 GB on iPhone Duo without the
+// increased-memory entitlement) and iOS terminates the app when it is exceeded. Desktop Cemu keeps unused textures for
+// two minutes, so changing areas briefly needs the memory of both. Evict RAM-backed textures sooner, and much sooner
+// when little memory is left. g_iosMemoryPressure: 0 normal, 1 low, 2 critical (src/ios/WiiPadPerf.cpp).
+extern std::atomic<int> g_iosMemoryPressure;
+extern std::atomic<int> g_iosTextureCount;
+extern std::atomic<int> g_iosTexturesEvicted;
+#endif
+
 bool LatteTC_CleanupCheckTexture(LatteTexture* texture, uint32 currentTick)
 {
 	uint32 currentFrameCount = LatteGPUState.frameCounter;
@@ -359,11 +369,23 @@ bool LatteTC_CleanupCheckTexture(LatteTexture* texture, uint32 currentTick)
 	if( !texture->isUpdatedOnGPU )
 	{
 		// RAM-only textures are safe to be deleted since we can always restore them from RAM
+#if BOOST_OS_IOS
+		const int pressure = g_iosMemoryPressure.load(std::memory_order_relaxed);
+		const uint32 minTicks = pressure >= 2 ? 1000 : (pressure == 1 ? 5 * 1000 : 20 * 1000);
+		const uint32 minFrames = pressure >= 2 ? 30 : (pressure == 1 ? 120 : 600);
+		if( ticksSinceLastAccess >= minTicks && framesSinceLastAccess >= minFrames )
+		{
+			LatteTexture_Delete(texture);
+			g_iosTexturesEvicted.fetch_add(1, std::memory_order_relaxed);
+			return true;
+		}
+#else
 		if( ticksSinceLastAccess >= (120*1000) && framesSinceLastAccess >= 2000 )
 		{
 			LatteTexture_Delete(texture);
 			return true;
 		}
+#endif
 	}
 
 	if ((LatteGPUState.currentDrawCallTick - texture->lastAccessTick) >= 100 && 
@@ -399,10 +421,21 @@ void LatteTC_CleanupUnusedTextures()
 	static size_t currentScanIndex = 0;
 	uint32 currentTick = GetTickCount();
 	sint32 maxDelete = 10;
+	sint32 scanCount = 25;
 	std::vector<LatteTexture*>& allTextures = LatteTexture::GetAllTextures();
+#if BOOST_OS_IOS
+	// under memory pressure, scan and free more per frame (a short stutter beats being terminated by iOS)
+	switch (g_iosMemoryPressure.load(std::memory_order_relaxed))
+	{
+	case 1: scanCount = 100; maxDelete = 40; break;
+	case 2: scanCount = 400; maxDelete = 120; break;
+	default: break;
+	}
+	g_iosTextureCount.store((int)allTextures.size(), std::memory_order_relaxed);
+#endif
 	if (!allTextures.empty())
 	{
-		for (sint32 c = 0; c < 25; c++)
+		for (sint32 c = 0; c < scanCount; c++)
 		{
 			if (currentScanIndex >= allTextures.size())
 				currentScanIndex = 0;

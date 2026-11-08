@@ -17,6 +17,12 @@
 // MetalPipelineCompiler.cpp, BOOST_OS_IOS); those are reset by the "compiled N shaders" notification, this one isn't.
 std::atomic_int g_wiipadCompiledShaders{ 0 };
 
+// Memory pressure from the memory iOS still allows WiiPad (os_proc_available_memory), refreshed every 15 frames:
+// 0 normal, 1 low (< 900 MB), 2 critical (< 450 MB). The texture cache evicts sooner as it rises (LatteTextureCache.cpp).
+std::atomic<int> g_iosMemoryPressure{ 0 };
+std::atomic<int> g_iosTextureCount{ 0 };   // textures in Cemu's cache (written by the texture cleanup)
+std::atomic<int> g_iosTexturesEvicted{ 0 }; // RAM-backed textures freed early (iOS policy)
+
 namespace coreinit
 {
 	extern std::atomic<bool> g_iosTitlePaused; // coreinit_Thread.cpp
@@ -43,6 +49,8 @@ namespace
 	int s_summaryHitchesWithShaders = 0;
 	Clock::time_point s_lastHitchLog{};
 	int s_suppressedHitches = 0;
+
+	int s_lastEvicted = 0; // evictions counted at the last summary
 
 	std::mutex s_statsMutex;
 	WiiPadPerf::Stats s_stats;
@@ -77,14 +85,42 @@ namespace
 			sum += ms;
 		const double avgMs = sum / s_summaryFrameMs.size();
 		LogAsync(fmt::format("perf: last {:.0f} s: {:.1f} fps average, 1% low {:.1f} fps (frame {:.1f} ms), worst frame {:.0f} ms, "
-			"{} hitches > {:.0f} ms ({} while shaders compiled), {} MB memory still available to WiiPad", seconds, 1000.0 / avgMs,
-			1000.0 / p99, p99, sorted.back(), s_summaryHitches, kHitchMs, s_summaryHitchesWithShaders,
-			os_proc_available_memory() >> 20));
+			"{} hitches > {:.0f} ms ({} while shaders compiled), {} MB memory still available to WiiPad, {} textures cached, {} freed early",
+			seconds, 1000.0 / avgMs, 1000.0 / p99, p99, sorted.back(), s_summaryHitches, kHitchMs, s_summaryHitchesWithShaders,
+			os_proc_available_memory() >> 20, g_iosTextureCount.load(std::memory_order_relaxed),
+			g_iosTexturesEvicted.load(std::memory_order_relaxed) - s_lastEvicted));
+		s_lastEvicted = g_iosTexturesEvicted.load(std::memory_order_relaxed);
+	}
+}
+
+namespace
+{
+	int s_framesSincePressureCheck = 0;
+	int s_lastLoggedPressure = 0;
+
+	void UpdateMemoryPressure()
+	{
+		const size_t availableMB = os_proc_available_memory() >> 20;
+		const int level = availableMB < 450 ? 2 : (availableMB < 900 ? 1 : 0);
+		g_iosMemoryPressure.store(level, std::memory_order_relaxed);
+		if (level != s_lastLoggedPressure)
+		{
+			static const char* names[] = { "normal", "low", "critical" };
+			LogAsync(fmt::format("memory: pressure {} ({} MB still available to WiiPad, {} textures cached): {}",
+				names[level], availableMB, g_iosTextureCount.load(std::memory_order_relaxed),
+				level > s_lastLoggedPressure ? "freeing unused textures sooner" : "back to the normal texture cache policy"));
+			s_lastLoggedPressure = level;
+		}
 	}
 }
 
 void WiiPadPerf_FramePresented()
 {
+	if (++s_framesSincePressureCheck >= 15)
+	{
+		s_framesSincePressureCheck = 0;
+		UpdateMemoryPressure();
+	}
 	const auto now = Clock::now();
 	const int shaders = g_wiipadCompiledShaders.load(std::memory_order_relaxed);
 	if (s_lastFrame == Clock::time_point{})

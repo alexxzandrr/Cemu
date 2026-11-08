@@ -31,7 +31,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: io.github.wiipad.WiiPad
         PRODUCT_NAME: WiiPad
         MARKETING_VERSION: "0.1.0"
-        CURRENT_PROJECT_VERSION: "9"
+        CURRENT_PROJECT_VERSION: "10"
         TARGETED_DEVICE_FAMILY: "1,2"         # iPhone (incl. iPhone Duo) and iPad
         ARCHS: arm64
         SWIFT_OBJC_BRIDGING_HEADER: Sources/WiiPad-Bridging-Header.h
