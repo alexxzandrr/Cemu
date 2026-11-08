@@ -13,10 +13,10 @@ on:
   workflow_dispatch:
     inputs:
       runner:
-        description: "Runner image (xcode-27 is a preview image with an iOS 27 SDK and may queue)"
+        description: "Runner image (xcode-27: Xcode 27 incl. 27.1 with the iPhone Duo SDK; macos-26: older SDK, letterboxed on iPhone Duo)"
         type: choice
-        options: [ macos-26, xcode-27 ]
-        default: macos-26
+        options: [ xcode-27, macos-26 ]
+        default: xcode-27
 
 concurrency:
   group: ios-build-${{ github.ref }}
@@ -30,8 +30,8 @@ env:
 
 jobs:
   build:
-    name: Build WiiPad (${{ inputs.runner || 'macos-26' }})
-    runs-on: ${{ inputs.runner || 'macos-26' }}
+    name: Build WiiPad (${{ inputs.runner || 'xcode-27' }})
+    runs-on: ${{ inputs.runner || 'xcode-27' }}
     timeout-minutes: 150
 
     steps:
@@ -48,6 +48,16 @@ jobs:
           git submodule update --init dependencies/vcpkg
           git submodule update --init --depth 1 dependencies/ZArchive dependencies/imgui dependencies/metal-cpp dependencies/xbyak_aarch64
           git submodule status
+
+      - name: Select Xcode (newest 27.1 or later if installed)
+        run: |
+          set -euo pipefail
+          echo "== Installed Xcode apps =="; ls -d /Applications/Xcode*.app || true
+          # iOS 27.1 SDK: full-screen layout on iPhone Duo and the fold APIs (reservedRegions). Prefer the newest
+          # Xcode 27.x >= 27.1; otherwise keep the image default.
+          pick=$(ls -d /Applications/Xcode_27.[1-9]*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ -n "$pick" ]; then sudo xcode-select -s "$pick/Contents/Developer"; echo "selected $pick"; else echo "no Xcode 27.1+ found; using the default"; fi
+          xcodebuild -version
 
       - name: Print environment
         id: env
