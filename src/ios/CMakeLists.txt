@@ -11,6 +11,7 @@
 #   - IOSAudioAPI.mm      : IAudioAPI backend (RemoteIO AudioUnit), registered in audio/IAudioAPI.cpp
 #   - WiiPadJIT.mm        : Phase 3 Gate 0 JIT feasibility test (StikDebug breakpoint protocol, iOS 26+ TXM)
 #   - WiiPadPause.cpp    : pause/resume a running title (suspends the guest threads, stops audio)
+#   - WiiPadPerf.cpp     : frame timing, in-game FPS readout and hitch log (called from LatteRenderTarget.cpp)
 #   - ../main.cpp         : provides CemuCommonInit(); its desktop main() is excluded on iOS
 #
 # CemuCore: every Cemu library plus the vcpkg dependencies merged into one libCemuCore.a,
@@ -35,6 +36,8 @@ add_library(WiiPadPlatform STATIC
 	WiiPadDiagnostics.mm
 	WiiPadPause.h
 	WiiPadPause.cpp
+	WiiPadPerf.h
+	WiiPadPerf.cpp
 	WiiPadJIT.h
 	WiiPadJIT.mm
 )

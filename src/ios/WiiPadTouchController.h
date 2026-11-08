@@ -28,9 +28,17 @@ namespace WiiPadInput
 	// Call once before CafeSystem::LaunchForegroundTitle(). Returns false on failure (logged).
 	bool ConnectGamePad();
 
-	void SetButton(Button button, bool pressed);
+	// Input sources, kept apart and merged when Cemu reads the GamePad (buttons: either source; sticks: the one deflected
+	// most), so releasing an on-screen button never cancels the same button held on a controller.
+	enum Source : int { OnScreen = 0, GameController = 1 };
+
+	void SetButton(Button button, bool pressed, Source source = OnScreen);
 	// x, y in [-1, 1], y up positive. stick 0 = left, 1 = right
-	void SetStick(int stick, float x, float y);
+	void SetStick(int stick, float x, float y, Source source = OnScreen);
+	// releases every button and centres both sticks of `source` (controller disconnected)
+	void ReleaseAll(Source source);
+	// the game asked the GamePad to rumble (Cemu's VPAD rumble)
+	bool RumbleActive();
 	// normalized [0, 1] position in the game view (top-left origin)
 	// Touch at a position normalized to [0, 1] (top-left origin). padWindow = false: on the main game view (Cemu's
 	// main-window touch); true: on the separate GamePad screen view (Cemu's pad-window touch, desktop PadViewFrame).

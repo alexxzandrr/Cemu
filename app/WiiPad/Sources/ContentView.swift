@@ -152,6 +152,8 @@ struct MetalHostView: UIViewRepresentable {
 struct ContentView: View {
     @StateObject private var model = BootModel()
     @ObservedObject private var session = GameSession.shared
+    @ObservedObject private var controllers = ControllerManager.shared
+    @AppStorage(ControllerManager.hideTouchKey) private var hideTouchWithController = true
     @State private var showImporter = false
     @State private var importerTypes: [UTType] = [.folder]
     @State private var showSettings = false
@@ -247,6 +249,8 @@ struct ContentView: View {
         let tv = running ? arrangement.tv : CGRect(origin: .zero, size: geo.size)
         let pad = running ? arrangement.pad : nil
         let panel = running && arrangement.kind == .stacked ? arrangement.controlsPanel : nil
+        // on-screen controls step aside while a game controller is connected (Settings › Controller)
+        let touchHidden = controlsHidden || (controllers.connected && hideTouchWithController)
 
         ZStack(alignment: .topLeading) {
             MetalHostView { view in model.start(hostView: view) }
@@ -266,18 +270,18 @@ struct ContentView: View {
             if running {
                 if let panel {
                     DualControlsPanel(panel: panel)
-                        .opacity(controlsHidden ? 0 : max(controlsOpacity, 0.75))
-                        .allowsHitTesting(!controlsHidden)
-                        .disabled(controlsHidden)
+                        .opacity(touchHidden ? 0 : max(controlsOpacity, 0.75))
+                        .allowsHitTesting(!touchHidden)
+                        .disabled(touchHidden)
                         .offset(x: panel.minX, y: panel.minY)
                     // bar only, over the top of the TV half
-                    GamePadOverlay(showControls: false, showSwap: false, controlsHidden: $controlsHidden)
+                    GamePadOverlay(showControls: false, showSwap: false, controlsHidden: .constant(touchHidden))
                         .padding(EdgeInsets(top: insets.top, leading: insets.leading, bottom: 0, trailing: insets.trailing))
                         .frame(width: arrangement.tv.width, height: arrangement.tv.height)
                         .offset(x: arrangement.tv.minX, y: arrangement.tv.minY)
                 } else {
                     GamePadOverlay(showControls: true, showSwap: arrangement.kind == .single,
-                                   controlsHidden: $controlsHidden)
+                                   controlsHidden: .constant(touchHidden))
                         .padding(insets)
                         .frame(width: geo.size.width, height: geo.size.height)
                 }

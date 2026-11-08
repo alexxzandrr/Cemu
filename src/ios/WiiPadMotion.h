@@ -13,4 +13,10 @@ namespace WiiPadMotion
 	void Start();        // starts 100 Hz updates; safe to call more than once
 	void Recenter();     // resets the sensor fusion (current pose becomes the starting pose)
 	MotionSample GetSample();
+
+	// Game controller motion (DualSense, DualShock 4, Switch Pro): while enabled the device's own sensors are ignored.
+	void SetControllerSource(bool enabled);
+	// One controller sample: timestamp in seconds, rotation rate in rad/s, total acceleration in g (toward the earth),
+	// in the controller's frame (x right, y away from the player, z up out of the face).
+	void FeedController(double timestamp, double gyroX, double gyroY, double gyroZ, double accX, double accY, double accZ);
 }

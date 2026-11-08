@@ -677,6 +677,10 @@ void LatteRenderTarget_trackUpdates()
 	}
 }
 
+#if BOOST_OS_IOS
+void WiiPadPerf_FramePresented(); // src/ios/WiiPadPerf.cpp: frame timing and hitch log
+#endif
+
 void LatteRenderTarget_itHLESwapScanBuffer()
 {
 	performanceMonitor.cycle[performanceMonitor.cycleIndex].frameCounter++;
@@ -685,6 +689,9 @@ void LatteRenderTarget_itHLESwapScanBuffer()
 	LattePerformanceMonitor_frameEnd();
 	FrameBenchmarkHelper::FrameEnd();
 	LatteGPUState.frameCounter++;
+#if BOOST_OS_IOS
+	WiiPadPerf_FramePresented();
+#endif
 	g_renderer->SwapBuffers(true, true);
 
 	catchOpenGLError();

@@ -1,0 +1,149 @@
+// WiiPad frame timing and hitch logging. See WiiPadPerf.h.
+
+#include "WiiPadPerf.h"
+#include "WiiPadLog.h"
+
+#include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <mutex>
+#include <vector>
+
+#include <os/proc.h>
+
+extern std::atomic_int g_compiled_shaders_total; // LatteShader.cpp: shaders and Metal pipelines compiled so far
+
+namespace coreinit
+{
+	extern std::atomic<bool> g_iosTitlePaused; // coreinit_Thread.cpp
+}
+
+namespace
+{
+	using Clock = std::chrono::steady_clock;
+
+	constexpr double kHitchMs = 50.0;        // a frame this long is a visible stutter at 30 or 60 fps
+	constexpr double kGapMs = 1000.0;        // longer: a pause, loading or the app in the background, not a hitch
+	constexpr double kSummarySeconds = 30.0;
+
+	// GPU thread only
+	Clock::time_point s_lastFrame{};
+	int s_lastShaderCount = 0;
+	Clock::time_point s_windowStart{};
+	int s_windowFrames = 0;
+	double s_windowSumMs = 0.0;
+	double s_windowWorstMs = 0.0;
+	Clock::time_point s_summaryStart{};
+	std::vector<float> s_summaryFrameMs;
+	int s_summaryHitches = 0;
+	int s_summaryHitchesWithShaders = 0;
+	Clock::time_point s_lastHitchLog{};
+	int s_suppressedHitches = 0;
+
+	std::mutex s_statsMutex;
+	WiiPadPerf::Stats s_stats;
+
+	double Ms(Clock::duration d)
+	{
+		return std::chrono::duration<double, std::milli>(d).count();
+	}
+
+	void WriteSummary(double seconds)
+	{
+		if (s_summaryFrameMs.empty())
+			return;
+		std::vector<float> sorted = s_summaryFrameMs;
+		std::sort(sorted.begin(), sorted.end());
+		const float p99 = sorted[std::min(sorted.size() - 1, (size_t)(sorted.size() * 0.99))];
+		double sum = 0.0;
+		for (float ms : s_summaryFrameMs)
+			sum += ms;
+		const double avgMs = sum / s_summaryFrameMs.size();
+		WiiPadLog::Write(fmt::format("perf: last {:.0f} s: {:.1f} fps average, 1% low {:.1f} fps (frame {:.1f} ms), worst frame {:.0f} ms, "
+			"{} hitches > {:.0f} ms ({} while shaders compiled), {} MB memory still available to WiiPad", seconds, 1000.0 / avgMs,
+			1000.0 / p99, p99, sorted.back(), s_summaryHitches, kHitchMs, s_summaryHitchesWithShaders,
+			os_proc_available_memory() >> 20));
+	}
+}
+
+void WiiPadPerf_FramePresented()
+{
+	const auto now = Clock::now();
+	const int shaders = g_compiled_shaders_total.load(std::memory_order_relaxed);
+	if (s_lastFrame == Clock::time_point{})
+	{
+		s_lastFrame = s_windowStart = s_summaryStart = now;
+		s_lastShaderCount = shaders;
+		return;
+	}
+	const double frameMs = Ms(now - s_lastFrame);
+	const int newShaders = shaders - s_lastShaderCount;
+	s_lastFrame = now;
+	s_lastShaderCount = shaders;
+
+	if (frameMs >= kGapMs || coreinit::g_iosTitlePaused.load(std::memory_order_relaxed))
+	{
+		// paused, loading or in the background: start fresh windows
+		s_windowStart = s_summaryStart = now;
+		s_windowFrames = 0;
+		s_windowSumMs = s_windowWorstMs = 0.0;
+		s_summaryFrameMs.clear();
+		s_summaryHitches = s_summaryHitchesWithShaders = 0;
+		return;
+	}
+
+	s_windowFrames++;
+	s_windowSumMs += frameMs;
+	s_windowWorstMs = std::max(s_windowWorstMs, frameMs);
+	s_summaryFrameMs.push_back((float)frameMs);
+
+	if (frameMs > kHitchMs)
+	{
+		s_summaryHitches++;
+		if (newShaders > 0)
+			s_summaryHitchesWithShaders++;
+		// at most two lines per second; the rest are counted in the next line
+		if (Ms(now - s_lastHitchLog) >= 500.0)
+		{
+			WiiPadLog::Write(fmt::format("perf: hitch {:.0f} ms{}{}", frameMs,
+				newShaders > 0 ? fmt::format(", {} shader(s)/pipeline(s) compiled during it", newShaders) : std::string(", no new shaders"),
+				s_suppressedHitches > 0 ? fmt::format(" (+{} more since the last line)", s_suppressedHitches) : std::string()));
+			s_lastHitchLog = now;
+			s_suppressedHitches = 0;
+		}
+		else
+			s_suppressedHitches++;
+	}
+
+	const double windowMs = Ms(now - s_windowStart);
+	if (windowMs >= 1000.0 && s_windowFrames > 0)
+	{
+		{
+			std::lock_guard lock(s_statsMutex);
+			s_stats.fps = (float)(s_windowFrames * 1000.0 / windowMs);
+			s_stats.averageMs = (float)(s_windowSumMs / s_windowFrames);
+			s_stats.worstMs = (float)s_windowWorstMs;
+		}
+		s_windowStart = now;
+		s_windowFrames = 0;
+		s_windowSumMs = s_windowWorstMs = 0.0;
+	}
+
+	const double summarySeconds = Ms(now - s_summaryStart) / 1000.0;
+	if (summarySeconds >= kSummarySeconds)
+	{
+		WriteSummary(summarySeconds);
+		s_summaryStart = now;
+		s_summaryFrameMs.clear();
+		s_summaryHitches = s_summaryHitchesWithShaders = 0;
+	}
+}
+
+namespace WiiPadPerf
+{
+	Stats GetStats()
+	{
+		std::lock_guard lock(s_statsMutex);
+		return s_stats;
+	}
+}

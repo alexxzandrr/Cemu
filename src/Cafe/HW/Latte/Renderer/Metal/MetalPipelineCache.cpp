@@ -16,6 +16,9 @@
 #include "config/ActiveSettings.h"
 
 #include <openssl/sha.h>
+#if BOOST_OS_IOS
+#include <pthread/qos.h>
+#endif
 
 static bool g_compilePipelineThreadInit{false};
 static std::mutex g_compilePipelineMutex;
@@ -25,6 +28,9 @@ static std::queue<MetalPipelineCompiler*> g_compilePipelineRequests;
 static void compileThreadFunc(sint32 threadIndex)
 {
 	SetThreadName("compilePl");
+#if BOOST_OS_IOS
+	pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0); // below the emulation threads (see RendererShaderMtl.cpp)
+#endif
 
 	// one thread runs at normal priority while the others run at lower priority
 	if (threadIndex != 0)
@@ -583,6 +589,9 @@ bool MetalPipelineCache::DeserializePipeline(MemStreamReader& memReader, CachedP
 int MetalPipelineCache::CompilerThread()
 {
 	SetThreadName("plCacheCompiler");
+#if BOOST_OS_IOS
+	pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0); // below the emulation threads (see RendererShaderMtl.cpp)
+#endif
 	while (m_numCompilationThreads != 0)
 	{
 		std::vector<uint8> pipelineData = m_compilationQueue.pop();

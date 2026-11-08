@@ -12,10 +12,32 @@
 
 namespace
 {
-	// state written by the UI (main thread), read by Cemu (emulation thread)
-	std::atomic<uint32_t> s_buttons{ 0 };
-	std::atomic<float> s_stick[2][2]{}; // [stick][x/y]
-	bool s_touchDown = false;           // main thread only (logging)
+	// state written by the UI (main thread), read by Cemu (emulation thread); one set per source
+	// (WiiPadInput::Source: on-screen controls, game controller), merged in raw_state()
+	constexpr int kSources = 2;
+	std::atomic<uint32_t> s_buttons[kSources]{};
+	std::atomic<float> s_stick[kSources][2][2]{}; // [source][stick][x/y]
+	std::atomic<bool> s_rumble{ false };          // set by Cemu (VPAD rumble), polled by the app
+	bool s_touchDown = false;                     // main thread only (logging)
+
+	// the stick from the source that is deflected most
+	glm::vec2 MergedStick(int stick)
+	{
+		glm::vec2 best{ 0.0f, 0.0f };
+		float bestLength = 0.0f;
+		for (int source = 0; source < kSources; source++)
+		{
+			const glm::vec2 v{ s_stick[source][stick][0].load(std::memory_order_relaxed),
+				s_stick[source][stick][1].load(std::memory_order_relaxed) };
+			const float length = v.x * v.x + v.y * v.y;
+			if (length > bestLength)
+			{
+				best = v;
+				bestLength = length;
+			}
+		}
+		return best;
+	}
 
 	const char* kButtonNames[WiiPadInput::Count] = {
 		"A", "B", "X", "Y", "L", "R", "ZL", "ZR", "+", "-", "Up", "Down", "Left", "Right", "StickL", "StickR", "Screen"
@@ -49,18 +71,25 @@ namespace
 		bool has_motion() override { return WiiPadMotion::Available(); }
 		MotionSample get_motion_sample() override { return WiiPadMotion::GetSample(); }
 
+		// GamePad rumble: forwarded to a connected game controller by the app (CemuBridge.gamePadRumble)
+		bool has_rumble() override { return true; }
+		void start_rumble() override { s_rumble.store(true, std::memory_order_relaxed); }
+		void stop_rumble() override { s_rumble.store(false, std::memory_order_relaxed); }
+
 		// Called by VPADController::VPADRead (emulation thread) through update_state()
 		ControllerState raw_state() override
 		{
 			ControllerState result{};
-			const uint32_t mask = s_buttons.load(std::memory_order_relaxed);
+			uint32_t mask = 0;
+			for (int source = 0; source < kSources; source++)
+				mask |= s_buttons[source].load(std::memory_order_relaxed);
 			for (uint32_t i = 0; i < WiiPadInput::Count; i++)
 			{
 				if (mask & (1u << i))
 					result.buttons.SetButtonState(kButton0 + i, true);
 			}
-			result.axis = { s_stick[0][0].load(std::memory_order_relaxed), s_stick[0][1].load(std::memory_order_relaxed) };
-			result.rotation = { s_stick[1][0].load(std::memory_order_relaxed), s_stick[1][1].load(std::memory_order_relaxed) };
+			result.axis = MergedStick(0);
+			result.rotation = MergedStick(1);
 
 			if (m_logging) // false during calibrate(): only count reads made by the game's VPADRead
 			{
@@ -174,22 +203,37 @@ namespace WiiPadInput
 		}
 	}
 
-	void SetButton(Button button, bool pressed)
+	void SetButton(Button button, bool pressed, Source source)
 	{
-		if (button >= Count)
+		if (button >= Count || source < 0 || source >= kSources)
 			return;
 		if (pressed)
-			s_buttons.fetch_or(1u << button, std::memory_order_relaxed);
+			s_buttons[source].fetch_or(1u << button, std::memory_order_relaxed);
 		else
-			s_buttons.fetch_and(~(1u << button), std::memory_order_relaxed);
+			s_buttons[source].fetch_and(~(1u << button), std::memory_order_relaxed);
 	}
 
-	void SetStick(int stick, float x, float y)
+	void SetStick(int stick, float x, float y, Source source)
 	{
-		if (stick < 0 || stick > 1)
+		if (stick < 0 || stick > 1 || source < 0 || source >= kSources)
 			return;
-		s_stick[stick][0].store(std::clamp(x, -1.0f, 1.0f), std::memory_order_relaxed);
-		s_stick[stick][1].store(std::clamp(y, -1.0f, 1.0f), std::memory_order_relaxed);
+		s_stick[source][stick][0].store(std::clamp(x, -1.0f, 1.0f), std::memory_order_relaxed);
+		s_stick[source][stick][1].store(std::clamp(y, -1.0f, 1.0f), std::memory_order_relaxed);
+	}
+
+	void ReleaseAll(Source source)
+	{
+		if (source < 0 || source >= kSources)
+			return;
+		s_buttons[source].store(0, std::memory_order_relaxed);
+		for (int stick = 0; stick < 2; stick++)
+			for (int axis = 0; axis < 2; axis++)
+				s_stick[source][stick][axis].store(0.0f, std::memory_order_relaxed);
+	}
+
+	bool RumbleActive()
+	{
+		return s_rumble.load(std::memory_order_relaxed);
 	}
 
 	void SetTouch(bool down, float nx, float ny, bool padWindow)

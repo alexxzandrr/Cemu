@@ -29,6 +29,13 @@ typedef NS_ENUM(NSInteger, WiiPadButton) {
     WiiPadButtonScreen NS_SWIFT_NAME(screen),
 };
 
+/// Frame timing of the running game (last full second).
+typedef struct {
+    float fps;
+    float averageMs;
+    float worstMs;
+} WiiPadFrameStats;
+
 @interface CemuBridge : NSObject
 
 @property (class, nonatomic, readonly) CemuBridge *shared;
@@ -130,6 +137,25 @@ typedef NS_ENUM(NSInteger, WiiPadButton) {
 
 /// Resets GamePad motion (iPad gyroscope/accelerometer): the current pose becomes the starting pose.
 - (void)recenterMotion;
+
+// --- Game controllers (Bluetooth: DualSense, DualShock 4, Xbox, Switch Pro, MFi). Kept apart from the on-screen
+// controls and merged when the game reads the GamePad. Cheap and thread-safe. ---
+
+- (void)setControllerButton:(WiiPadButton)button pressed:(BOOL)pressed;
+/// x, y in [-1, 1], y up positive. stick 0 = left, 1 = right
+- (void)setControllerStick:(NSInteger)stick x:(float)x y:(float)y;
+/// Releases every controller button and centres its sticks (controller disconnected).
+- (void)releaseControllerInput;
+/// YES: GamePad motion comes from the controller (feedControllerMotion) instead of this device's sensors.
+@property (nonatomic) BOOL controllerMotionEnabled;
+/// One controller motion sample: rotation rate (rad/s) and total acceleration (g, toward the earth), controller frame.
+- (void)feedControllerMotionTimestamp:(double)timestamp gyroX:(double)gx gyroY:(double)gy gyroZ:(double)gz
+                                 accX:(double)ax accY:(double)ay accZ:(double)az;
+/// The game is asking the GamePad to rumble right now.
+@property (nonatomic, readonly) BOOL gamePadRumble;
+
+/// Frames per second and frame times of the running game (last full second). Hitches are also logged to WiiPad.log.
+@property (nonatomic, readonly) WiiPadFrameStats frameStats;
 
 // --- JIT (Phase 3, WiiPadJIT). Independent of the core; enable before launching a title. ---
 

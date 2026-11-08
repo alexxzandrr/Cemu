@@ -19,6 +19,8 @@ namespace
 	MotionSample s_sample;
 	double s_lastTimestamp = 0.0;
 	bool s_loggedFirst = false;
+	bool s_controllerSource = false;   // a game controller's sensors feed the GamePad motion instead of the device
+	double s_lastControllerTimestamp = 0.0;
 
 	struct Vec3
 	{
@@ -135,6 +137,8 @@ namespace
 
 		{
 			std::scoped_lock lock(s_mutex);
+			if (s_controllerSource)
+				return; // a controller's gyro is in use
 			s_lastGravity = gravity;
 			// Recenter calibration: the same rotation for both, so the iPad's frame becomes a rotated GamePad frame
 			const Vec3 acc = s_calibration * rawAcc;
@@ -212,9 +216,48 @@ namespace WiiPadMotion
 			Feed(s_handler, 0.02, Vec3{ 0, 0, 0 }, settledAcc);
 		s_sample = s_handler.getMotionSample();
 		s_lastTimestamp = 0.0;
+		s_lastControllerTimestamp = 0.0;
 		const double tiltDeg = std::acos(std::clamp(g.z, -1.0, 1.0)) * 180.0 / M_PI;
 		WiiPadLog::Write(fmt::format("motion: recentered: current pose is the new upright (it was {:.0f} deg from upright; gravity {:.2f} {:.2f} {:.2f})",
 			tiltDeg, g.x, g.y, g.z));
+	}
+
+	void SetControllerSource(bool enabled)
+	{
+		std::scoped_lock lock(s_mutex);
+		if (s_controllerSource == enabled)
+			return;
+		s_controllerSource = enabled;
+		s_lastTimestamp = 0.0;
+		s_lastControllerTimestamp = 0.0;
+		s_calibration = Mat3{};
+		s_handler = WiiUMotionHandler{};
+		WiiPadLog::Write(enabled ? "motion: GamePad motion now comes from the game controller's gyroscope"
+								 : "motion: GamePad motion now comes from this device's gyroscope");
+	}
+
+	void FeedController(double timestamp, double gyroX, double gyroY, double gyroZ, double accX, double accY, double accZ)
+	{
+		// Controller frame (GameController framework, like Core Motion for a device lying face up): x = right,
+		// y = away from the player (toward the shoulder buttons), z = up out of the face. Acceleration in g, pointing
+		// toward the earth like Core Motion's. Held normally, the controller is the "device in portrait" case.
+		const double r[2] = { 1, 0 }, u[2] = { 0, 1 };
+		const Vec3 rawAcc = ToGamepadFrame({ accX, accY, accZ }, r, u);
+		const Vec3 rawGyro = ToGamepadFrame({ gyroX, gyroY, gyroZ }, r, u);
+		std::scoped_lock lock(s_mutex);
+		if (!s_controllerSource)
+			return;
+		s_lastGravity = Normalized(rawAcc);
+		const Vec3 acc = s_calibration * rawAcc;
+		const Vec3 gyro = s_calibration * rawGyro;
+		double dt = s_lastControllerTimestamp > 0.0 ? timestamp - s_lastControllerTimestamp : 0.005;
+		s_lastControllerTimestamp = timestamp;
+		if (dt <= 0.0)
+			return;
+		if (dt > 1.0)
+			dt = 1.0;
+		Feed(s_handler, dt, gyro, acc);
+		s_sample = s_handler.getMotionSample();
 	}
 
 	MotionSample GetSample()

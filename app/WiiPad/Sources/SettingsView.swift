@@ -56,7 +56,9 @@ struct SettingsView: View {
                     Text("Automatic: folded like a laptop, the TV picture is on top and the GamePad screen with the controls below; folded like a book, side by side; flat or closed, the TV picture fills the screen.")
                 }
 
-                Section("Controls") {
+                ControllerSettingsSection()
+
+                Section("On-screen controls") {
                     VStack(alignment: .leading) {
                         Text("Opacity \(Int(controlsOpacity * 100)) %")
                         Slider(value: $controlsOpacity, in: 0.2...1.0, step: 0.05)

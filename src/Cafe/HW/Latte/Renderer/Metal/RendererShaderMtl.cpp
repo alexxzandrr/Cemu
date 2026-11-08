@@ -8,6 +8,9 @@
 #include "Common/precompiled.h"
 #include "GameProfile/GameProfile.h"
 #include "util/helpers/helpers.h"
+#if BOOST_OS_IOS
+#include <pthread/qos.h>
+#endif
 
 #define METAL_AIR_CACHE_NAME "Cemu_AIR_cache"
 #define METAL_AIR_CACHE_PATH "/Volumes/" METAL_AIR_CACHE_NAME
@@ -79,6 +82,10 @@ public:
 	void CompilerThreadFunc()
 	{
 		SetThreadName("mtlShaderComp");
+#if BOOST_OS_IOS
+	// below the emulation threads (user-interactive QoS): compiling must not take the performance cores from the game
+	pthread_set_qos_class_self_np(QOS_CLASS_USER_INITIATED, 0);
+#endif
 		while (m_threadsActive.load(std::memory_order::relaxed))
 		{
 			s_compilationQueueCount.decrementWithWait();

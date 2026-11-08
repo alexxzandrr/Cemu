@@ -43,6 +43,8 @@ final class GameSession: ObservableObject {
 
     @Published private(set) var paused = false
     @Published private(set) var fps: Double = 0
+    /// worst frame time in the last second (ms): spikes show up here before they show in the average
+    @Published private(set) var worstFrameMs: Double = 0
     @Published private(set) var thermal: ProcessInfo.ThermalState = ProcessInfo.processInfo.thermalState
     @Published private(set) var thermalLimited = false
     @Published var menuOpen = false {
@@ -124,14 +126,10 @@ final class GameSession: ObservableObject {
     }
 
     private func sample() {
-        let now = Date()
-        let frames = Int(CemuBridge.shared.presentedFrameCount)
-        let dt = now.timeIntervalSince(lastSample)
-        if dt > 0.2 {
-            fps = paused ? 0 : Double(frames &- lastFrames) / dt
-        }
-        lastFrames = frames
-        lastSample = now
+        // measured on the GPU thread at every frame (WiiPadPerf), last full second
+        let stats = CemuBridge.shared.frameStats
+        fps = paused ? 0 : Double(stats.fps)
+        worstFrameMs = paused ? 0 : Double(stats.worstMs)
     }
 
     static func describe(_ state: ProcessInfo.ThermalState) -> String {
@@ -204,6 +202,9 @@ struct InGameBar: View {
         HStack(spacing: 8) {
             Text("\(Int(session.fps.rounded())) FPS")
                 .monospacedDigit()
+            Text("max \(Int(session.worstFrameMs.rounded())) ms")
+                .monospacedDigit()
+                .foregroundStyle(session.worstFrameMs > 50 ? Theme.warn : .white.opacity(0.75))
             Circle()
                 .fill(session.heatTint)
                 .frame(width: 8, height: 8)

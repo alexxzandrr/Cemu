@@ -6,6 +6,7 @@
 #include "WiiPadMotion.h"
 #include "WiiPadJIT.h"
 #include "WiiPadPause.h"
+#include "WiiPadPerf.h"
 #include "audio/IAudioAPI.h"
 
 #include "Cafe/CafeSystem.h"
@@ -1204,6 +1205,55 @@ static NSData* PNGFromTGA(const std::vector<uint8>& tga)
 - (void)recenterMotion
 {
 	WiiPadMotion::Recenter();
+}
+
+- (void)setControllerButton:(WiiPadButton)button pressed:(BOOL)pressed
+{
+	WiiPadInput::SetButton((WiiPadInput::Button)button, pressed, WiiPadInput::GameController);
+}
+
+- (void)setControllerStick:(NSInteger)stick x:(float)x y:(float)y
+{
+	WiiPadInput::SetStick((int)stick, x, y, WiiPadInput::GameController);
+}
+
+- (void)releaseControllerInput
+{
+	WiiPadInput::ReleaseAll(WiiPadInput::GameController);
+}
+
+static BOOL s_controllerMotion = NO;
+
+- (BOOL)controllerMotionEnabled
+{
+	return s_controllerMotion;
+}
+
+- (void)setControllerMotionEnabled:(BOOL)enabled
+{
+	s_controllerMotion = enabled;
+	WiiPadMotion::SetControllerSource(enabled);
+}
+
+- (void)feedControllerMotionTimestamp:(double)timestamp gyroX:(double)gx gyroY:(double)gy gyroZ:(double)gz
+                                 accX:(double)ax accY:(double)ay accZ:(double)az
+{
+	WiiPadMotion::FeedController(timestamp, gx, gy, gz, ax, ay, az);
+}
+
+- (BOOL)gamePadRumble
+{
+	return WiiPadInput::RumbleActive() ? YES : NO;
+}
+
+- (WiiPadFrameStats)frameStats
+{
+	const WiiPadPerf::Stats stats = WiiPadPerf::GetStats();
+	WiiPadFrameStats result;
+	result.fps = stats.fps;
+	result.averageMs = stats.averageMs;
+	result.worstMs = stats.worstMs;
+	return result;
 }
 
 - (void)shutdown
