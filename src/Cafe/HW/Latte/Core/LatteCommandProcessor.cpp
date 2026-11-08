@@ -167,6 +167,12 @@ void LatteCP_signalEnterWait()
 */
 uint32 LatteCP_readU32Deprc()
 {
+#if BOOST_OS_IOS
+	// iPhone/iPad: desktop Cemu yields in a tight loop while the GPU waits for commands, which keeps a host core at
+	// 100 % (heat, battery). After a short spin phase, sleep briefly between checks: 50 us at first, 250 us once the
+	// GPU has been idle for a while (e.g. waiting for the next frame). New commands are picked up within that time.
+	uint32 idleRounds = 0;
+#endif
 	// no display list active
 	while (true)
 	{
@@ -191,7 +197,14 @@ uint32 LatteCP_readU32Deprc()
 		// still no command data available, do some other tasks
 		LatteTiming_HandleTimedVsync();
 		LatteAsyncCommands_checkAndExecute();
+#if BOOST_OS_IOS
+		if (++idleRounds > 64)
+			std::this_thread::sleep_for(std::chrono::microseconds(idleRounds > 1024 ? 250 : 50));
+		else
+			std::this_thread::yield();
+#else
 		std::this_thread::yield();
+#endif
 		performanceMonitor.gpuTime_idleTime.endMeasuring();
 	}
 	UNREACHABLE;
@@ -640,6 +653,11 @@ LatteCMDPtr LatteCP_itMemSemaphore(LatteCMDPtr cmd, uint32 nWords)
 			if (oldVal == 0)
 			{
 				loopCount++;
+#if BOOST_OS_IOS
+				if (loopCount > 20000)
+					std::this_thread::sleep_for(std::chrono::microseconds(50));
+				else
+#endif
 				if (loopCount > 2000)
 					std::this_thread::yield();
 				continue;
@@ -964,6 +982,9 @@ LatteCMDPtr LatteCP_itHLEWaitForFlip(LatteCMDPtr cmd, uint32 nWords)
 	MPTR reserved1 = LatteReadCMD(); // reserved
 	// wait for flip
 	uint32 currentFlipCount = LatteGPUState.flipCounter;
+#if BOOST_OS_IOS
+	uint32 waitRounds = 0;
+#endif
 	while (true)
 	{
 		_mm_pause();
@@ -973,7 +994,15 @@ LatteCMDPtr LatteCP_itHLEWaitForFlip(LatteCMDPtr cmd, uint32 nWords)
 		}
 		// check if any GPU events happened
 		LatteTiming_HandleTimedVsync();
+#if BOOST_OS_IOS
+		// waiting for the next vsync can take a whole frame: sleep in 100 us steps instead of spinning (see LatteCP_readU32Deprc)
+		if (++waitRounds > 32)
+			std::this_thread::sleep_for(std::chrono::microseconds(100));
+		else
+			std::this_thread::yield();
+#else
 		std::this_thread::yield();
+#endif
 	}
 	return cmd;
 }

@@ -14,6 +14,10 @@
 #include "util/Fiber/Fiber.h"
 
 #include "util/helpers/helpers.h"
+#if BOOST_OS_IOS
+#include <condition_variable>
+#include <pthread/qos.h>
+#endif
 
 #ifdef __arm64__
 #if defined(__clang__)
@@ -71,6 +75,27 @@ namespace coreinit
 	CounterSemaphore g_coreRunQueueThreadCount[3];
 
 	bool g_isMulticoreMode;
+
+#if BOOST_OS_IOS
+	// Idle wait for the scheduler's main core (iPhone/iPad). Desktop Cemu polls the run queues in a tight loop while
+	// the game waits (vsync, GX2 flips), which keeps a host core at 100 % and heats up a phone. After a few empty
+	// rounds the idle loop sleeps for at most kIdleWaitTimeout, and is woken at once when a thread becomes runnable.
+	// The timeout bounds the delay for alarms and other events that __OSCheckSystemEvents polls.
+	std::mutex g_idleWaitMtx;
+	std::condition_variable g_idleWaitCv;
+	std::atomic<uint32> g_idleWaitSeq{0};
+	std::atomic<sint32> g_idleWaiters{0};
+
+	void __OSIdleWaitWake()
+	{
+		g_idleWaitSeq.fetch_add(1, std::memory_order_release);
+		if (g_idleWaiters.load(std::memory_order_acquire) > 0)
+		{
+			std::lock_guard lock(g_idleWaitMtx);
+			g_idleWaitCv.notify_all();
+		}
+	}
+#endif
 
 	thread_local uint32 t_assignedCoreIndex;
 	thread_local Fiber* t_schedulerFiber;
@@ -773,6 +798,9 @@ namespace coreinit
 			thread->currentRunQueue[i] = (g_coreRunQueue.GetPtr() + i);
 			g_coreRunQueueThreadCount[i].increment();
 		}
+#if BOOST_OS_IOS
+		__OSIdleWaitWake();
+#endif
 	}
 
 	void __OSRemoveThreadFromRunQueues(OSThread_t* thread)
@@ -1250,8 +1278,18 @@ namespace coreinit
 		bool isMainCore = g_isMulticoreMode == false || t_assignedCoreIndex == 1;
 		sint32 coreIndex = t_assignedCoreIndex;
 		__OSUnlockScheduler();
+#if BOOST_OS_IOS
+		// single-core: one round visits all three cores, so allow three times the empty rounds before waiting
+		const uint32 idleSpinBudget = g_isMulticoreMode ? 24 : 72;
+		constexpr auto kIdleWaitTimeout = std::chrono::microseconds(250);
+		uint32 emptyRounds = 0;
+#endif
 		while (true)
 		{
+#if BOOST_OS_IOS
+			const uint32 wakeSeq = g_idleWaitSeq.load(std::memory_order_acquire);
+			bool ranThread = false;
+#endif
 			if (!g_coreRunQueueThreadCount[coreIndex].isZero()) // avoid hammering the lock on the main core if there is no runable thread
 			{
 				__OSLockScheduler();
@@ -1260,6 +1298,9 @@ namespace coreinit
 				{
 					cemu_assert_debug(nextThread->state == OSThread_t::THREAD_STATE::STATE_RUNNING);
 					__OSSwitchToThreadFiber(nextThread, coreIndex);
+#if BOOST_OS_IOS
+					ranThread = true;
+#endif
 				}
 				__OSUnlockScheduler();
 			}
@@ -1268,6 +1309,22 @@ namespace coreinit
 				__OSCheckSystemEvents();
 				if(g_isMulticoreMode == false)
 					coreIndex = (coreIndex + 1) % 3;
+#if BOOST_OS_IOS
+				if (ranThread)
+					emptyRounds = 0;
+				else if (++emptyRounds > idleSpinBudget)
+				{
+					g_idleWaiters.fetch_add(1, std::memory_order_acq_rel);
+					{
+						std::unique_lock lock(g_idleWaitMtx);
+						g_idleWaitCv.wait_for(lock, kIdleWaitTimeout, [wakeSeq]() {
+							return g_idleWaitSeq.load(std::memory_order_acquire) != wakeSeq ||
+								!sSchedulerActive.load(std::memory_order_relaxed);
+						});
+					}
+					g_idleWaiters.fetch_sub(1, std::memory_order_acq_rel);
+				}
+#endif
 			}
 			else
 			{
@@ -1391,6 +1448,10 @@ namespace coreinit
 	{
 		SetThreadName(fmt::format("OSSched[core={}]", (uintptr_t)_assignedCoreIndex).c_str());
 		t_assignedCoreIndex = (sint32)(uintptr_t)_assignedCoreIndex;
+#if BOOST_OS_IOS
+		// keep emulated CPU cores on the performance cores (iOS may otherwise move a busy thread to an efficiency core)
+		pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0);
+#endif
 
 		ConfigureHostFloatingPointEnvironment();
 

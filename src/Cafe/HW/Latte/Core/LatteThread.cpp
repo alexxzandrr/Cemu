@@ -1,6 +1,9 @@
 #include "Cafe/HW/Latte/ISA/RegDefines.h"
 #include "Cafe/OS/libs/gx2/GX2.h" // todo - remove dependency
 #include "Cafe/HW/Latte/Core/Latte.h"
+#if BOOST_OS_IOS
+#include <pthread/qos.h>
+#endif
 #include "Cafe/HW/Latte/Core/LatteDraw.h"
 #include "Cafe/HW/Latte/Core/LatteShader.h"
 #include "Cafe/HW/Latte/Core/LatteAsyncCommands.h"
@@ -115,6 +118,9 @@ void LatteThread_HandleOSScreen()
 int Latte_ThreadEntry()
 {
 	SetThreadName("LatteThread");
+#if BOOST_OS_IOS
+	pthread_set_qos_class_self_np(QOS_CLASS_USER_INTERACTIVE, 0); // performance cores, like the emulated CPU threads
+#endif
 	sint32 w,h;
 	WindowSystem::GetWindowPhysSize(w,h);
 
