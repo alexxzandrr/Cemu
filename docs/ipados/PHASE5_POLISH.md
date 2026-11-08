@@ -54,3 +54,25 @@ Also: `GCSupportsGameMode` (Game Mode) and the games app category in Info.plist.
 An independent review of the diff (before device testing) found and this phase fixed: idle-wait latency in single-core
 mode (a thread queued for another core waited for a timeout), audio restarting during a pause, the pause UI state
 drifting from the core's, and too-frequent wakeups while paused.
+
+## Phase 5b — controllers and stutter tracing
+
+**Bluetooth controllers** (`Controllers.swift`): DualSense, DualShock 4, Xbox, Switch Pro and MFi controllers through
+GameController, mapped onto the emulated GamePad as a second input source (`WiiPadInput::Source::GameController`),
+merged with the on-screen controls when Cemu reads the GamePad (buttons: either; sticks: the one deflected most).
+Face buttons by Wii U position (○ A, ✕ B, △ X, □ Y) or by Xbox letters. Controller gyro → GamePad motion (the first
+sample becomes "upright", like Recenter; the device's own motion updates stop meanwhile). Game rumble → controller
+haptics (latched in C++ so pulses shorter than the 30 Hz poll aren't lost; looping haptic player). PS/Home button →
+WiiPad's menu (only while a game runs and Settings is closed); touchpad click → GamePad screen. On-screen controls
+hide while a controller is connected. Events arrive on a background queue.
+
+**Stutter tracing** (`WiiPadPerf.cpp`): every frame is timed on the GPU thread. Frames over 50 ms are logged
+(`perf: hitch …`) with the number of shaders/pipelines compiled meanwhile (`g_wiipadCompiledShaders`, a counter that
+the "compiled N shaders" notification doesn't reset), and a 30 s summary (`perf: last 30 s …`: average, 1 % low,
+worst frame, hitches, available memory). Log lines are written from a background queue. The in-game readout shows
+FPS and the worst frame time of the last second.
+
+**Compile threads** (Metal shader and pipeline compilers) run at user-initiated QoS, below the game's
+user-interactive CPU and GPU threads, so background compiling doesn't take the performance cores (the A-series chip in
+iPhone Duo has two). When the GPU thread has to wait for a shader a compile thread is working on, that thread's QoS is
+raised to user-interactive for the wait (`pthread_override_qos_class_start_np`).

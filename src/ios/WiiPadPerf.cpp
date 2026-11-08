@@ -7,11 +7,15 @@
 #include <atomic>
 #include <chrono>
 #include <mutex>
+#include <string>
 #include <vector>
 
+#include <dispatch/dispatch.h>
 #include <os/proc.h>
 
-extern std::atomic_int g_compiled_shaders_total; // LatteShader.cpp: shaders and Metal pipelines compiled so far
+// Shaders and Metal pipelines compiled so far. Incremented next to Cemu's own counters (RendererShaderMtl.cpp,
+// MetalPipelineCompiler.cpp, BOOST_OS_IOS); those are reset by the "compiled N shaders" notification, this one isn't.
+std::atomic_int g_wiipadCompiledShaders{ 0 };
 
 namespace coreinit
 {
@@ -42,6 +46,19 @@ namespace
 
 	std::mutex s_statsMutex;
 	WiiPadPerf::Stats s_stats;
+	Clock::time_point s_statsTime{};
+
+	// WiiPadLog::Write syncs the file to disk: never on the GPU thread, whose frames are being measured
+	void LogAsync(std::string line)
+	{
+		static dispatch_queue_t queue = dispatch_queue_create("wiipad.perf.log", DISPATCH_QUEUE_SERIAL);
+		auto* heapLine = new std::string(std::move(line));
+		dispatch_async_f(queue, heapLine, [](void* context) {
+			auto* text = static_cast<std::string*>(context);
+			WiiPadLog::Write(*text);
+			delete text;
+		});
+	}
 
 	double Ms(Clock::duration d)
 	{
@@ -59,7 +76,7 @@ namespace
 		for (float ms : s_summaryFrameMs)
 			sum += ms;
 		const double avgMs = sum / s_summaryFrameMs.size();
-		WiiPadLog::Write(fmt::format("perf: last {:.0f} s: {:.1f} fps average, 1% low {:.1f} fps (frame {:.1f} ms), worst frame {:.0f} ms, "
+		LogAsync(fmt::format("perf: last {:.0f} s: {:.1f} fps average, 1% low {:.1f} fps (frame {:.1f} ms), worst frame {:.0f} ms, "
 			"{} hitches > {:.0f} ms ({} while shaders compiled), {} MB memory still available to WiiPad", seconds, 1000.0 / avgMs,
 			1000.0 / p99, p99, sorted.back(), s_summaryHitches, kHitchMs, s_summaryHitchesWithShaders,
 			os_proc_available_memory() >> 20));
@@ -69,7 +86,7 @@ namespace
 void WiiPadPerf_FramePresented()
 {
 	const auto now = Clock::now();
-	const int shaders = g_compiled_shaders_total.load(std::memory_order_relaxed);
+	const int shaders = g_wiipadCompiledShaders.load(std::memory_order_relaxed);
 	if (s_lastFrame == Clock::time_point{})
 	{
 		s_lastFrame = s_windowStart = s_summaryStart = now;
@@ -105,7 +122,7 @@ void WiiPadPerf_FramePresented()
 		// at most two lines per second; the rest are counted in the next line
 		if (Ms(now - s_lastHitchLog) >= 500.0)
 		{
-			WiiPadLog::Write(fmt::format("perf: hitch {:.0f} ms{}{}", frameMs,
+			LogAsync(fmt::format("perf: hitch {:.0f} ms{}{}", frameMs,
 				newShaders > 0 ? fmt::format(", {} shader(s)/pipeline(s) compiled during it", newShaders) : std::string(", no new shaders"),
 				s_suppressedHitches > 0 ? fmt::format(" (+{} more since the last line)", s_suppressedHitches) : std::string()));
 			s_lastHitchLog = now;
@@ -123,6 +140,7 @@ void WiiPadPerf_FramePresented()
 			s_stats.fps = (float)(s_windowFrames * 1000.0 / windowMs);
 			s_stats.averageMs = (float)(s_windowSumMs / s_windowFrames);
 			s_stats.worstMs = (float)s_windowWorstMs;
+			s_statsTime = now;
 		}
 		s_windowStart = now;
 		s_windowFrames = 0;
@@ -144,6 +162,9 @@ namespace WiiPadPerf
 	Stats GetStats()
 	{
 		std::lock_guard lock(s_statsMutex);
+		// no frames for a while (paused, loading, stopped): report zeros rather than the last second that had frames
+		if (s_statsTime == Clock::time_point{} || Ms(Clock::now() - s_statsTime) > 1500.0)
+			return Stats{};
 		return s_stats;
 	}
 }

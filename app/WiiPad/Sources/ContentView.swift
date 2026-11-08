@@ -211,6 +211,16 @@ struct ContentView: View {
         .sheet(isPresented: $showSettings) {
             SettingsView(model: model, inGame: model.titleLaunched)
         }
+        .onChange(of: showSettings) { session.settingsOpen = $0 }
+        .onChange(of: controllers.connected) { connected in
+            // on-screen controls step aside while a game controller is connected (Settings › Controller); the menu's
+            // Show/Hide controls still overrides this
+            if hideTouchWithController { controlsHidden = connected }
+        }
+        .onChange(of: model.titleLaunched) { launched in
+            // a controller connected before the game started
+            if launched, hideTouchWithController, controllers.connected { controlsHidden = true }
+        }
         .onChange(of: scenePhase) { phase in
             // pause while WiiPad isn't the active app (Control Center, app switcher, Home); resume on return
             guard model.titleLaunched else { return }
@@ -249,8 +259,7 @@ struct ContentView: View {
         let tv = running ? arrangement.tv : CGRect(origin: .zero, size: geo.size)
         let pad = running ? arrangement.pad : nil
         let panel = running && arrangement.kind == .stacked ? arrangement.controlsPanel : nil
-        // on-screen controls step aside while a game controller is connected (Settings › Controller)
-        let touchHidden = controlsHidden || (controllers.connected && hideTouchWithController)
+        let touchHidden = controlsHidden
 
         ZStack(alignment: .topLeading) {
             MetalHostView { view in model.start(hostView: view) }

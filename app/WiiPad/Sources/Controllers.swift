@@ -18,6 +18,11 @@ enum ButtonLayout: String, CaseIterable, Identifiable {
     }
 }
 
+/// Settings read on every controller event, cached off the main actor (updated when Settings changes them).
+enum ControllerPrefs {
+    static var letters = UserDefaults.standard.string(forKey: ControllerManager.layoutKey) == ButtonLayout.letters.rawValue
+}
+
 /// Bluetooth game controllers (DualSense, DualShock 4, Xbox, Switch Pro, MFi) through Apple's GameController framework,
 /// mapped onto the emulated Wii U GamePad (CemuBridge controller input, separate from the on-screen controls).
 /// Also: the controller's gyroscope as GamePad motion, game rumble on the controller, the PS/Home button for WiiPad's
@@ -42,6 +47,8 @@ final class ControllerManager: ObservableObject {
     private var rumblePlayer: CHHapticAdvancedPatternPlayer?
     private var rumbling = false
     private var homeHeld = false
+    /// controller events and motion arrive here, off the main thread (DualSense motion is ~250 Hz)
+    private let eventQueue = DispatchQueue(label: "wiipad.controller", qos: .userInteractive)
 
     private init() {}
 
@@ -73,13 +80,17 @@ final class ControllerManager: ObservableObject {
         if let current = controller, current !== c { return } // one controller drives the GamePad
         controller = c
         name = c.vendorName ?? "Controller"
+        homeHeld = false
         c.playerIndex = .index1
+        c.handlerQueue = eventQueue
         if let pad = c.extendedGamepad {
             // the PS / Home button opens WiiPad's menu instead of the system's game overlay
             pad.buttonHome?.preferredSystemGestureState = .disabled
-            pad.valueChangedHandler = { gamepad, _ in
+            pad.valueChangedHandler = { gamepad, element in
                 ControllerManager.apply(gamepad)
-                ControllerManager.handleMenuButtons(gamepad)
+                if let home = gamepad.buttonHome, element === home {
+                    ControllerManager.handleHomeButton(pressed: home.isPressed)
+                }
             }
             ControllerManager.apply(pad)
         }
@@ -107,6 +118,7 @@ final class ControllerManager: ObservableObject {
         name = ""
         hasMotion = false
         batteryText = nil
+        homeHeld = false
         // another one may still be connected
         if let next = GCController.controllers().first(where: { $0 !== c && $0.extendedGamepad != nil }) {
             attach(next)
@@ -118,7 +130,7 @@ final class ControllerManager: ObservableObject {
     /// Writes the whole controller state (called on every change; cheap).
     nonisolated static func apply(_ g: GCExtendedGamepad) {
         let b = CemuBridge.shared
-        let letters = UserDefaults.standard.string(forKey: layoutKey) == ButtonLayout.letters.rawValue
+        let letters = ControllerPrefs.letters
         // GCExtendedGamepad names buttons by position: buttonA bottom, buttonB right, buttonX left, buttonY top
         let south = g.buttonA.isPressed, east = g.buttonB.isPressed, west = g.buttonX.isPressed, north = g.buttonY.isPressed
         b.setControllerButton(.a, pressed: letters ? south : east)
@@ -146,18 +158,16 @@ final class ControllerManager: ObservableObject {
         b.setControllerStick(1, x: g.rightThumbstick.xAxis.value, y: g.rightThumbstick.yAxis.value)
     }
 
-    /// PS / Home button: opens or closes WiiPad's in-game menu (on release).
-    nonisolated static func handleMenuButtons(_ g: GCExtendedGamepad) {
-        let pressed = g.buttonHome?.isPressed ?? false
+    /// PS / Home button: opens or closes WiiPad's menu on release, only while a game runs and Settings is closed.
+    nonisolated static func handleHomeButton(pressed: Bool) {
         Task { @MainActor in
             let manager = ControllerManager.shared
-            if pressed != manager.homeHeld {
-                manager.homeHeld = pressed
-                if !pressed {
-                    let session = GameSession.shared
-                    if session.menuOpen { session.resumeAll() } else { session.menuOpen = true }
-                }
-            }
+            guard pressed != manager.homeHeld else { return }
+            manager.homeHeld = pressed
+            guard !pressed else { return }
+            let session = GameSession.shared
+            guard session.running, !session.settingsOpen else { return }
+            if session.menuOpen { session.resumeAll() } else { session.menuOpen = true }
         }
     }
 
@@ -167,7 +177,8 @@ final class ControllerManager: ObservableObject {
     func configureMotion() {
         guard let c = controller else { return }
         let wanted = UserDefaults.standard.object(forKey: Self.motionKey) as? Bool ?? true
-        guard let motion = c.motion else {
+        // needs a gyroscope: acceleration alone would freeze the GamePad's motion
+        guard let motion = c.motion, motion.hasRotationRate else {
             hasMotion = false
             CemuBridge.shared.controllerMotionEnabled = false
             return
@@ -208,7 +219,7 @@ final class ControllerManager: ObservableObject {
         rumbleTimer?.invalidate()
         rumbleTimer = nil
         let wanted = UserDefaults.standard.object(forKey: Self.rumbleKey) as? Bool ?? true
-        guard wanted, let haptics = controller?.haptics else {
+        guard wanted, GameSession.shared.running, let haptics = controller?.haptics else {
             stopRumble()
             return
         }
@@ -240,6 +251,7 @@ final class ControllerManager: ObservableObject {
                                       relativeTime: 0, duration: 30)
             let pattern = try CHHapticPattern(events: [event], parameters: [])
             let player = try engine.makeAdvancedPlayer(with: pattern)
+            player.loopEnabled = true // rumble longer than the event keeps going until the game stops it
             try player.start(atTime: CHHapticTimeImmediate)
             rumblePlayer = player
         } catch {
@@ -253,7 +265,7 @@ final class ControllerManager: ObservableObject {
         rumbling = false
     }
 
-    private func updateBattery() {
+    func updateBattery() {
         guard let battery = controller?.battery else { batteryText = nil; return }
         let percent = Int((battery.batteryLevel * 100).rounded())
         batteryText = battery.batteryState == .charging ? "\(percent) % · charging" : "\(percent) %"
@@ -288,6 +300,7 @@ struct ControllerSettingsSection: View {
             Picker("Face buttons", selection: $layout) {
                 ForEach(ButtonLayout.allCases) { Text($0.title).tag($0) }
             }
+            .onChange(of: layout) { ControllerPrefs.letters = $0 == .letters }
             Toggle("Aim with the controller's motion", isOn: $useMotion)
                 .onChange(of: useMotion) { _ in ControllerManager.shared.configureMotion() }
             Toggle("Rumble", isOn: $rumble)
@@ -298,5 +311,6 @@ struct ControllerSettingsSection: View {
         } footer: {
             Text("Pair a DualSense, DualShock 4, Xbox or Switch Pro controller in Settings › Bluetooth (DualSense: hold Create + PS until the light flashes). The PS / Home button opens WiiPad's menu; the touchpad click shows the GamePad screen. Wii U positions: ○ = A, ✕ = B, △ = X, □ = Y.")
         }
+        .onAppear { manager.updateBattery() }
     }
 }

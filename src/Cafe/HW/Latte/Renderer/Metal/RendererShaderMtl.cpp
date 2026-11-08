@@ -23,6 +23,9 @@ static bool s_isLoadingShadersMtl{false};
 
 extern std::atomic_int g_compiled_shaders_total;
 extern std::atomic_int g_compiled_shaders_async;
+#if BOOST_OS_IOS
+extern std::atomic_int g_wiipadCompiledShaders; // src/ios/WiiPadPerf.cpp: never reset (the overlay resets the counters above)
+#endif
 
 class ShaderMtlThreadPool
 {
@@ -251,7 +254,19 @@ void RendererShaderMtl::PreponeCompilation(bool isRenderThread)
 	shaderMtlThreadPool.s_compilationQueueMutex.unlock();
 	if (!isStillQueued)
 	{
+#if BOOST_OS_IOS
+		// A compile thread (user-initiated QoS, below the game) has this shader: while the caller (usually the GPU
+		// thread) waits, run the compile threads at the caller's priority so the wait isn't stretched.
+		std::vector<pthread_override_t> overrides;
+		for (auto& thread : shaderMtlThreadPool.s_threads)
+			if (pthread_override_t o = pthread_override_qos_class_start_np(thread.native_handle(), QOS_CLASS_USER_INTERACTIVE, 0))
+				overrides.push_back(o);
 		m_compilationState.waitUntilValue(COMPILATION_STATE::DONE);
+		for (pthread_override_t o : overrides)
+			pthread_override_qos_class_end_np(o);
+#else
+		m_compilationState.waitUntilValue(COMPILATION_STATE::DONE);
+#endif
 		if (ShouldCountCompilation())
 		    --g_compiled_shaders_async; // compilation caused a stall so we don't consider this one async
 		return;
@@ -365,6 +380,10 @@ void RendererShaderMtl::CompileInternal()
 	// Count shader compilation
 	if (ShouldCountCompilation())
 	    g_compiled_shaders_total++;
+#if BOOST_OS_IOS
+	if (ShouldCountCompilation())
+		g_wiipadCompiledShaders++;
+#endif
 }
 
 /*

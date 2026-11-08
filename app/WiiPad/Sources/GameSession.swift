@@ -52,6 +52,10 @@ final class GameSession: ObservableObject {
     }
     /// the library entry being played (name and icon for the menus)
     @Published var current: LibraryEntry?
+    /// a title is running (set once Cemu has started it)
+    @Published private(set) var running = false
+    /// the Settings sheet is showing (controller shortcuts stay out of its way)
+    @Published var settingsOpen = false
 
     private var pauseReasons = Set<String>()
     private var timer: Timer?
@@ -65,6 +69,7 @@ final class GameSession: ObservableObject {
     func start() {
         guard !started else { return }
         started = true
+        running = true
         lastFrames = Int(CemuBridge.shared.presentedFrameCount)
         lastSample = Date()
         timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
@@ -75,6 +80,7 @@ final class GameSession: ObservableObject {
             Task { @MainActor in self?.thermalChanged() }
         }
         thermalChanged()
+        ControllerManager.shared.configureRumble() // rumble only follows the game while one runs
     }
 
     /// A pause holder: "menu", "background" (app not active), "closed" (iPhone Duo folded shut). The game runs while

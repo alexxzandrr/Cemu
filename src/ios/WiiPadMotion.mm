@@ -21,6 +21,9 @@ namespace
 	bool s_loggedFirst = false;
 	bool s_controllerSource = false;   // a game controller's sensors feed the GamePad motion instead of the device
 	double s_lastControllerTimestamp = 0.0;
+	bool s_recenterOnNextControllerSample = false; // the controller's first pose becomes "upright" (as Recenter does)
+
+	void RecenterLocked(); // below; s_mutex held
 
 	struct Vec3
 	{
@@ -162,6 +165,27 @@ namespace
 	}
 }
 
+namespace
+{
+	// main thread; s_manager exists
+	void StartDeviceUpdates()
+	{
+		if (s_manager.deviceMotionActive)
+			return;
+		s_manager.deviceMotionUpdateInterval = 0.01; // 100 Hz
+		// main queue: the handler reads the interface orientation from UIKit
+		[s_manager startDeviceMotionUpdatesToQueue:NSOperationQueue.mainQueue withHandler:^(CMDeviceMotion* motion, NSError* error) {
+			if (error)
+			{
+				WiiPadLog::Write(std::string("motion: device error: ") + (error.localizedDescription.UTF8String ?: "?"));
+				return;
+			}
+			if (motion)
+				HandleMotion(motion);
+		}];
+	}
+}
+
 namespace WiiPadMotion
 {
 	bool Available()
@@ -184,17 +208,7 @@ namespace WiiPadMotion
 				WiiPadLog::Write("motion: device motion (gyroscope + accelerometer) not available; no tilt controls");
 				return;
 			}
-			s_manager.deviceMotionUpdateInterval = 0.01; // 100 Hz
-			// main queue: the handler reads the interface orientation from UIKit
-			[s_manager startDeviceMotionUpdatesToQueue:NSOperationQueue.mainQueue withHandler:^(CMDeviceMotion* motion, NSError* error) {
-				if (error)
-				{
-					WiiPadLog::Write(std::string("motion: device error: ") + (error.localizedDescription.UTF8String ?: "?"));
-					return;
-				}
-				if (motion)
-					HandleMotion(motion);
-			}];
+			StartDeviceUpdates();
 			WiiPadLog::Write("motion: Core Motion device motion started (100 Hz) -> GamePad gyro/accelerometer");
 		});
 	}
@@ -207,6 +221,14 @@ namespace WiiPadMotion
 	void Recenter()
 	{
 		std::scoped_lock lock(s_mutex);
+		RecenterLocked();
+	}
+}
+
+namespace
+{
+	void RecenterLocked()
+	{
 		const Vec3 g = s_lastGravity;
 		s_calibration = RotationBetween(g, kUprightGravity);
 		s_handler = WiiUMotionHandler{};
@@ -221,6 +243,10 @@ namespace WiiPadMotion
 		WiiPadLog::Write(fmt::format("motion: recentered: current pose is the new upright (it was {:.0f} deg from upright; gravity {:.2f} {:.2f} {:.2f})",
 			tiltDeg, g.x, g.y, g.z));
 	}
+}
+
+namespace WiiPadMotion
+{
 
 	void SetControllerSource(bool enabled)
 	{
@@ -232,6 +258,16 @@ namespace WiiPadMotion
 		s_lastControllerTimestamp = 0.0;
 		s_calibration = Mat3{};
 		s_handler = WiiUMotionHandler{};
+		s_recenterOnNextControllerSample = enabled;
+		// the device's own sensors are not needed while the controller drives the motion (saves CPU and power)
+		dispatch_async(dispatch_get_main_queue(), ^{
+			if (!s_manager)
+				return;
+			if (enabled)
+				[s_manager stopDeviceMotionUpdates];
+			else
+				StartDeviceUpdates();
+		});
 		WiiPadLog::Write(enabled ? "motion: GamePad motion now comes from the game controller's gyroscope"
 								 : "motion: GamePad motion now comes from this device's gyroscope");
 	}
@@ -248,6 +284,13 @@ namespace WiiPadMotion
 		if (!s_controllerSource)
 			return;
 		s_lastGravity = Normalized(rawAcc);
+		if (s_recenterOnNextControllerSample)
+		{
+			s_recenterOnNextControllerSample = false;
+			RecenterLocked(); // resets the timestamps too
+			s_lastControllerTimestamp = timestamp;
+			return;
+		}
 		const Vec3 acc = s_calibration * rawAcc;
 		const Vec3 gyro = s_calibration * rawGyro;
 		double dt = s_lastControllerTimestamp > 0.0 ? timestamp - s_lastControllerTimestamp : 0.005;

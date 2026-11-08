@@ -18,6 +18,7 @@ namespace
 	std::atomic<uint32_t> s_buttons[kSources]{};
 	std::atomic<float> s_stick[kSources][2][2]{}; // [source][stick][x/y]
 	std::atomic<bool> s_rumble{ false };          // set by Cemu (VPAD rumble), polled by the app
+	std::atomic<bool> s_rumbleSeen{ false };      // latched start: a pulse shorter than the app's poll interval still counts
 	bool s_touchDown = false;                     // main thread only (logging)
 
 	// the stick from the source that is deflected most
@@ -73,7 +74,11 @@ namespace
 
 		// GamePad rumble: forwarded to a connected game controller by the app (CemuBridge.gamePadRumble)
 		bool has_rumble() override { return true; }
-		void start_rumble() override { s_rumble.store(true, std::memory_order_relaxed); }
+		void start_rumble() override
+		{
+			s_rumble.store(true, std::memory_order_relaxed);
+			s_rumbleSeen.store(true, std::memory_order_relaxed);
+		}
 		void stop_rumble() override { s_rumble.store(false, std::memory_order_relaxed); }
 
 		// Called by VPADController::VPADRead (emulation thread) through update_state()
@@ -233,7 +238,8 @@ namespace WiiPadInput
 
 	bool RumbleActive()
 	{
-		return s_rumble.load(std::memory_order_relaxed);
+		const bool seen = s_rumbleSeen.exchange(false, std::memory_order_relaxed);
+		return s_rumble.load(std::memory_order_relaxed) || seen;
 	}
 
 	void SetTouch(bool down, float nx, float ny, bool padWindow)

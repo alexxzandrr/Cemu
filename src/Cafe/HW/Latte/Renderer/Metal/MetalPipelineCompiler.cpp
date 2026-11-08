@@ -188,6 +188,9 @@ uint64 s_cacheTitleId = INVALID_TITLE_ID;
 
 extern std::atomic_int g_compiled_shaders_total;
 extern std::atomic_int g_compiled_shaders_async;
+#if BOOST_OS_IOS
+extern std::atomic_int g_wiipadCompiledShaders; // src/ios/WiiPadPerf.cpp: shaders + pipelines, never reset
+#endif
 
 template<typename T>
 void SetFragmentState(T* desc, const MetalAttachmentsInfo& lastUsedAttachmentsInfo, const MetalAttachmentsInfo& activeAttachmentsInfo, bool rasterizationEnabled, const LatteContextRegister& lcr)
@@ -389,6 +392,9 @@ bool MetalPipelineCompiler::Compile(bool forceCompile, bool isRenderThread, bool
 			g_compiling_pipelines_async++;
 		g_compiling_pipelines++;
 	}
+#if BOOST_OS_IOS
+	g_wiipadCompiledShaders++;
+#endif
 
 	m_pipelineObj.m_pipeline = pipeline;
 
