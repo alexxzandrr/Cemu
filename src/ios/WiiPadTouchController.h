@@ -32,5 +32,7 @@ namespace WiiPadInput
 	// x, y in [-1, 1], y up positive. stick 0 = left, 1 = right
 	void SetStick(int stick, float x, float y);
 	// normalized [0, 1] position in the game view (top-left origin)
-	void SetTouch(bool down, float nx, float ny);
+	// Touch at a position normalized to [0, 1] (top-left origin). padWindow = false: on the main game view (Cemu's
+	// main-window touch); true: on the separate GamePad screen view (Cemu's pad-window touch, desktop PadViewFrame).
+	void SetTouch(bool down, float nx, float ny, bool padWindow = false);
 }

@@ -192,27 +192,32 @@ namespace WiiPadInput
 		s_stick[stick][1].store(std::clamp(y, -1.0f, 1.0f), std::memory_order_relaxed);
 	}
 
-	void SetTouch(bool down, float nx, float ny)
+	void SetTouch(bool down, float nx, float ny, bool padWindow)
 	{
 		int w = 0, h = 0;
-		WindowSystem::GetWindowPhysSize(w, h);
+		if (padWindow)
+			WindowSystem::GetPadWindowPhysSize(w, h);
+		else
+			WindowSystem::GetWindowPhysSize(w, h);
 		const glm::ivec2 pos{ (int)(std::clamp(nx, 0.0f, 1.0f) * w), (int)(std::clamp(ny, 0.0f, 1.0f) * h) };
 
 		auto& input = InputManager::instance();
 		{
-			// same as the desktop touch handler (wxgui MainWindow::OnGesturePan)
-			std::scoped_lock lock(input.m_main_touch.m_mutex);
-			input.m_main_touch.position = pos;
-			input.m_main_touch.left_down = down;
+			// same as the desktop touch handlers (wxgui MainWindow / PadViewFrame::OnGesturePan)
+			auto& touch = padWindow ? input.m_pad_touch : input.m_main_touch;
+			std::scoped_lock lock(touch.m_mutex);
+			touch.position = pos;
+			touch.left_down = down;
 			if (down)
-				input.m_main_touch.left_down_toggle = true;
+				touch.left_down_toggle = true;
 		}
 
 		if (down != s_touchDown)
 		{
 			s_touchDown = down;
 			if (down)
-				WiiPadLog::Write(fmt::format("input: touch down at ({}, {}) px of {}x{} -> GamePad touchscreen", pos.x, pos.y, w, h));
+				WiiPadLog::Write(fmt::format("input: touch down at ({}, {}) px of {}x{} on the {} view -> GamePad touchscreen",
+					pos.x, pos.y, w, h, padWindow ? "GamePad" : "game"));
 			else
 				WiiPadLog::Write("input: touch released");
 		}

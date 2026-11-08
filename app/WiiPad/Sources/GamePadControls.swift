@@ -7,9 +7,9 @@ import SwiftUI
 /// − and + at the bottom centre. The whole layer is drawn at a user-chosen opacity; touches that miss a control fall
 /// through to the game view (GamePad touchscreen).
 
-private let fillIdle = Color.black.opacity(0.28)
-private let fillPressed = Color.white.opacity(0.55)
-private let stroke = Color.white.opacity(0.7)
+let fillIdle = Color.black.opacity(0.28)
+let fillPressed = Color.white.opacity(0.55)
+let stroke = Color.white.opacity(0.7)
 
 /// A button that is pressed while a finger is on it.
 struct PadButton: View {
@@ -117,7 +117,7 @@ struct PadDiamond: View {
 }
 
 /// Look of the overlay toolbar's translucent capsules (not GamePad buttons).
-private struct ToolbarLabel: View {
+struct ToolbarLabel: View {
     let systemImage: String
     var label: String? = nil
     var highlighted = false
@@ -136,7 +136,7 @@ private struct ToolbarLabel: View {
     }
 }
 
-private struct ToolbarButton: View {
+struct ToolbarButton: View {
     let systemImage: String
     var label: String? = nil
     var highlighted = false
@@ -153,10 +153,26 @@ private struct ToolbarButton: View {
 /// Full-screen overlay shown while a title runs: GamePad controls plus a small toolbar
 /// (GamePad/TV screen, tilt recenter, control opacity, hide controls).
 struct GamePadOverlay: View {
+    /// false: toolbar only (the stacked dual-screen layout draws the controls around the GamePad screen instead)
+    var showControls = true
+    /// the Pad view switch only makes sense while the GamePad screen has no view of its own
+    var showPadViewToggle = true
+    /// shared with the dual-screen control panel; not persisted (a title always starts with the controls shown)
+    @Binding var controlsHidden: Bool
+    @Binding var screens: ScreensSetting
+    let arrangement: ScreenArrangement.Kind
+
     @AppStorage("WiiPadControlsOpacity") private var controlsOpacity = 0.55
-    // not persisted: a title always starts with the controls shown
-    @State private var controlsHidden = false
     @State private var showGamePadScreen = false
+
+    init(showControls: Bool = true, showPadViewToggle: Bool = true, controlsHidden: Binding<Bool>,
+         screens: Binding<ScreensSetting>, arrangement: ScreenArrangement.Kind) {
+        self.showControls = showControls
+        self.showPadViewToggle = showPadViewToggle
+        self._controlsHidden = controlsHidden
+        self._screens = screens
+        self.arrangement = arrangement
+    }
 
     private static let opacityChoices: [Double] = [0.3, 0.55, 0.8, 1.0]
 
@@ -167,10 +183,12 @@ struct GamePadOverlay: View {
             ZStack {
                 // Hidden controls stay in the view tree (invisible, disabled, not hit-testable) so the overlay's
                 // layout over the game view is the same in both states; only visibility changes.
-                controls(scale: s)
-                    .opacity(controlsHidden ? 0 : controlsOpacity)
-                    .allowsHitTesting(!controlsHidden)
-                    .disabled(controlsHidden)
+                if showControls {
+                    controls(scale: s)
+                        .opacity(controlsHidden ? 0 : controlsOpacity)
+                        .allowsHitTesting(!controlsHidden)
+                        .disabled(controlsHidden)
+                }
                 VStack {
                     toolbar
                     Spacer()
@@ -179,6 +197,12 @@ struct GamePadOverlay: View {
             .padding(.horizontal, 20 * s)
             .padding(.vertical, 14 * s)
             .frame(width: geo.size.width, height: geo.size.height)
+        }
+        .onChange(of: showPadViewToggle) { available in
+            if !available, showGamePadScreen {
+                showGamePadScreen = false
+                CemuBridge.shared.setGamePadButton(.screen, pressed: false)
+            }
         }
     }
 
@@ -223,13 +247,16 @@ struct GamePadOverlay: View {
         HStack(spacing: 8) {
             // kept in place while hidden (invisible, not hit-testable), so Show sits exactly where Hide was
             HStack(spacing: 8) {
-                ToolbarButton(systemImage: "rectangle.on.rectangle",
-                              label: showGamePadScreen ? "TV view" : "Pad view",
-                              highlighted: showGamePadScreen) {
-                    showGamePadScreen.toggle()
-                    CemuBridge.shared.setGamePadButton(.screen, pressed: showGamePadScreen)
-                    CemuBridge.shared.log("GamePad screen in game view: \(showGamePadScreen ? "on" : "off")")
+                if showPadViewToggle {
+                    ToolbarButton(systemImage: "rectangle.on.rectangle",
+                                  label: showGamePadScreen ? "TV view" : "Pad view",
+                                  highlighted: showGamePadScreen) {
+                        showGamePadScreen.toggle()
+                        CemuBridge.shared.setGamePadButton(.screen, pressed: showGamePadScreen)
+                        CemuBridge.shared.log("GamePad screen in game view: \(showGamePadScreen ? "on" : "off")")
+                    }
                 }
+                ScreensMenu(setting: $screens, current: arrangement)
                 // tilt controls use the iPad's gyroscope; this makes the current pose the starting pose again
                 ToolbarButton(systemImage: "gyroscope", label: "Recenter") {
                     CemuBridge.shared.recenterMotion()

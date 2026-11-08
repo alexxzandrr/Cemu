@@ -401,6 +401,9 @@ namespace
 	BOOL _titleAccessStarted;
 	BOOL _titlePrepareAttempted; // CafeSystem was asked to mount/prepare a title (no second attempt per session)
 	BOOL _titleLaunched;
+	// separate GamePad screen (main thread only)
+	__weak UIView* _padView;
+	BOOL _padAttached;
 }
 
 + (CemuBridge*)shared
@@ -649,6 +652,101 @@ namespace
 	MetalRenderer::GetInstance()->ResizeLayer({ w, h }, true);
 	WiiPadLog::Write(fmt::format("game view resized: {}x{} pt ({}x{} px)", w, h,
 		windowInfo.phys_width.load(), windowInfo.phys_height.load()));
+}
+
+// Fills Cemu's pad-window sizes from `view` (desktop: PadViewFrame::OnSizeEvent).
+static void SetPadWindowSize(UIView* view)
+{
+	CGSize points = view.bounds.size;
+	CGFloat scale = view.traitCollection.displayScale > 0 ? view.traitCollection.displayScale : 2.0;
+	auto& windowInfo = WindowSystem::GetWindowInfo();
+	windowInfo.pad_width = (int)points.width;
+	windowInfo.pad_height = (int)points.height;
+	windowInfo.phys_pad_width = (int)(points.width * scale);
+	windowInfo.phys_pad_height = (int)(points.height * scale);
+	windowInfo.pad_dpi_scale = scale;
+}
+
+- (BOOL)gamePadViewAttached
+{
+	return _padAttached;
+}
+
+- (void)attachGamePadView:(UIView*)view
+{
+	if (![NSThread isMainThread] || !_rendererInitialized || !g_renderer)
+		return;
+	if (_padAttached && _padView == view)
+		return;
+	if (_padAttached)
+		[self detachGamePadView];
+	CGSize points = view.bounds.size;
+	if (points.width < 1 || points.height < 1)
+		return; // attached once the view has a size (gamePadViewDidResize)
+
+	// desktop: PadViewFrame constructor + MetalCanvas(is_main_window = false)
+	auto& windowInfo = WindowSystem::GetWindowInfo();
+	windowInfo.window_pad.backend = WindowSystem::WindowHandleInfo::Backend::UIKit;
+	windowInfo.window_pad.display = nullptr;
+	windowInfo.window_pad.surface = (__bridge void*)view;
+	windowInfo.canvas_pad = windowInfo.window_pad;
+	SetPadWindowSize(view);
+	try
+	{
+		MetalRenderer::GetInstance()->InitializeLayer({ (sint32)points.width, (sint32)points.height }, false);
+	}
+	catch (const std::exception& ex)
+	{
+		WiiPadLog::Write(std::string("GamePad view: InitializeLayer failed: ") + ex.what());
+		return;
+	}
+	windowInfo.pad_open = true;
+	_padView = view;
+	_padAttached = YES;
+	WiiPadLog::Write(fmt::format("GamePad view attached: {}x{} pt ({}x{} px)", (int)points.width, (int)points.height,
+		windowInfo.phys_pad_width.load(), windowInfo.phys_pad_height.load()));
+}
+
+- (void)detachGamePadView
+{
+	if (![NSThread isMainThread] || !_padAttached)
+		return;
+	// desktop: PadViewFrame::OnClose + ~MetalCanvas
+	auto& windowInfo = WindowSystem::GetWindowInfo();
+	windowInfo.pad_open = false;
+	if (g_renderer)
+		MetalRenderer::GetInstance()->ShutdownLayer(false);
+	// CreateMetalLayer added a layer-hosting subview; a later attach creates a new one
+	UIView* view = _padView;
+	for (UIView* sub in [view.subviews copy])
+		[sub removeFromSuperview];
+	windowInfo.window_pad.surface = nullptr;
+	windowInfo.canvas_pad = windowInfo.window_pad;
+	_padView = nil;
+	_padAttached = NO;
+	WiiPadLog::Write("GamePad view detached");
+}
+
+- (void)gamePadViewDidResize:(UIView*)view
+{
+	if (![NSThread isMainThread] || !_padAttached || _padView != view || !g_renderer)
+		return;
+	CGSize points = view.bounds.size;
+	if (points.width < 1 || points.height < 1)
+		return;
+	auto& windowInfo = WindowSystem::GetWindowInfo();
+	if (windowInfo.pad_width == (int)points.width && windowInfo.pad_height == (int)points.height)
+		return;
+	SetPadWindowSize(view);
+	MetalRenderer::GetInstance()->ResizeLayer({ (sint32)points.width, (sint32)points.height }, false);
+	WiiPadLog::Write(fmt::format("GamePad view resized: {}x{} pt", (int)points.width, (int)points.height));
+}
+
+- (void)setGamePadViewTouchDown:(BOOL)down x:(float)x y:(float)y
+{
+	if (!_titleLaunched || !_padAttached)
+		return;
+	WiiPadInput::SetTouch(down, x, y, true);
 }
 
 - (BOOL)multicoreCPU

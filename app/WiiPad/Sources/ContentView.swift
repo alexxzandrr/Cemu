@@ -164,18 +164,21 @@ struct ContentView: View {
     @State private var importerTypes: [UTType] = [.folder]
     @State private var multicoreCPU = CemuBridge.shared.multicoreCPU
     @State private var asyncShaderCompile = CemuBridge.shared.asyncShaderCompile
+    @AppStorage("WiiPadScreens") private var screens: ScreensSetting = .auto
+    @AppStorage("WiiPadControlsOpacity") private var controlsOpacity = 0.55
+    // not persisted: a title always starts with the controls shown
+    @State private var controlsHidden = false
+    @State private var lastArrangement: String = ""
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
-        // The Metal host view is always the first child of this ZStack, full screen, so SwiftUI never recreates it
-        // (that would detach Cemu's CAMetalLayer). Before launch the setup panel covers it (nothing is rendered yet);
-        // while a title runs the GamePad overlay sits on top and touches that miss a control reach the game view.
         ZStack {
-            MetalHostView { view in model.start(hostView: view) }
-                .ignoresSafeArea()
+            GeometryReader { geo in
+                screenLayer(geo)
+            }
+            .ignoresSafeArea()
 
-            if model.titleLaunched {
-                GamePadOverlay()
-            } else {
+            if !model.titleLaunched {
                 setupPanel
             }
         }
@@ -190,12 +193,89 @@ struct ContentView: View {
         }
     }
 
+    /// Game screens and controls in full-screen coordinates (the fold's coordinates). The TV view is always the first
+    /// child so SwiftUI never recreates it (that would detach Cemu's CAMetalLayer); only its frame changes. Before a
+    /// title runs it fills the screen behind the setup panel.
+    @ViewBuilder
+    private func screenLayer(_ geo: GeometryProxy) -> some View {
+        let insets = geo.safeAreaInsets
+        let arrangement = ScreenArrangement.make(size: geo.size, fold: activeFold(in: geo), setting: screens,
+                                                 insets: insets)
+        let running = model.titleLaunched
+        let tv = running ? arrangement.tv : CGRect(origin: .zero, size: geo.size)
+        let pad = running ? arrangement.pad : nil
+
+        ZStack(alignment: .topLeading) {
+            MetalHostView { view in model.start(hostView: view) }
+                .frame(width: tv.width, height: tv.height)
+                .offset(x: tv.minX, y: tv.minY)
+
+            PadHostView(active: pad != nil)
+                .frame(width: pad?.width ?? 1, height: pad?.height ?? 1)
+                .offset(x: pad?.minX ?? 0, y: pad?.minY ?? 0)
+                .opacity(pad != nil ? 1 : 0)
+                .allowsHitTesting(pad != nil)
+
+            if running {
+                switch arrangement.kind {
+                case .stacked:
+                    if let panel = arrangement.controlsPanel {
+                        DualControlsPanel(panel: panel)
+                            .opacity(controlsHidden ? 0 : controlsOpacity)
+                            .allowsHitTesting(!controlsHidden)
+                            .disabled(controlsHidden)
+                            .offset(x: panel.minX, y: panel.minY)
+                    }
+                    // toolbar only, over the top of the TV half
+                    GamePadOverlay(showControls: false, showPadViewToggle: false, controlsHidden: $controlsHidden,
+                                   screens: $screens, arrangement: arrangement.kind)
+                        .padding(EdgeInsets(top: insets.top, leading: insets.leading, bottom: 0, trailing: insets.trailing))
+                        .frame(width: arrangement.tv.width, height: arrangement.tv.height)
+                        .offset(x: arrangement.tv.minX, y: arrangement.tv.minY)
+                case .single, .sideBySide:
+                    GamePadOverlay(showControls: true, showPadViewToggle: arrangement.kind == .single,
+                                   controlsHidden: $controlsHidden, screens: $screens, arrangement: arrangement.kind)
+                        .padding(insets)
+                        .frame(width: geo.size.width, height: geo.size.height)
+                }
+            }
+        }
+        .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
+        .onChange(of: running ? arrangement.logDescription : "") { description in
+            guard !description.isEmpty, description != lastArrangement else { return }
+            lastArrangement = description
+            CemuBridge.shared.log("screens: \(description)")
+        }
+    }
+
+    private var compact: Bool { horizontalSizeClass == .compact }
+
+    @ViewBuilder
+    private var titleButtons: some View {
+        Button("Choose title folder…") {
+            model.pickerOpened("folder")
+            importerTypes = [.folder]
+            showImporter = true
+        }
+        Button("Choose title file…") {
+            model.pickerOpened("file")
+            importerTypes = [.item]
+            showImporter = true
+        }
+        if let saved = model.savedTitle {
+            Button("Reopen \(saved.lastPathComponent)") {
+                CemuBridge.shared.log("title selected from saved bookmark")
+                model.launchTitle(saved)
+            }
+        }
+    }
+
     private var setupPanel: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 Text("WiiPad")
                     .font(.largeTitle.bold())
-                Text("Phase 3 · JIT recompiler")
+                Text("Phase 4 · iPhone Duo and dual screens")
                     .foregroundStyle(.secondary)
 
                 VStack(alignment: .leading, spacing: 12) {
@@ -215,23 +295,10 @@ struct ContentView: View {
                 }
 
                 if model.readyForTitle {
-                    HStack(spacing: 12) {
-                        Button("Choose title folder…") {
-                            model.pickerOpened("folder")
-                            importerTypes = [.folder]
-                            showImporter = true
-                        }
-                        Button("Choose title file…") {
-                            model.pickerOpened("file")
-                            importerTypes = [.item]
-                            showImporter = true
-                        }
-                        if let saved = model.savedTitle {
-                            Button("Reopen \(saved.lastPathComponent)") {
-                                CemuBridge.shared.log("title selected from saved bookmark")
-                                model.launchTitle(saved)
-                            }
-                        }
+                    // one row on iPad, a column on a phone screen
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 12) { titleButtons }
+                        VStack(alignment: .leading, spacing: 10) { titleButtons }
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(model.loadingTitle)
@@ -251,7 +318,7 @@ struct ContentView: View {
                     Text("Compiled shaders are kept in Files › On My iPad › WiiPad › shaderCache and precompiled on the loading screen of the next launch.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
-                    Text("The game runs full screen with translucent GamePad controls. Touches that miss a control are GamePad touchscreen input. To stop a title, close WiiPad from the app switcher.")
+                    Text("The game runs full screen with translucent GamePad controls. On iPhone Duo folded like a laptop, or on a tall screen, the TV image goes on top and the GamePad screen with the controls below; folded like a book, they sit side by side. \"Screens\" in the toolbar changes this. Touches on the GamePad screen (or that miss a control) are GamePad touchscreen input. To stop a title, close WiiPad from the app switcher.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
@@ -271,10 +338,10 @@ struct ContentView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
-            .padding(32)
+            .padding(compact ? 18 : 32)
             .frame(maxWidth: 680, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial))
-            .padding(40)
+            .padding(compact ? 10 : 40)
             .frame(maxWidth: .infinity)
         }
     }

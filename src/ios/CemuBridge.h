@@ -54,6 +54,21 @@ typedef NS_ENUM(NSInteger, WiiPadButton) {
 /// resize handlers. Main thread only; no-op before the renderer exists or when the size is unchanged.
 - (void)gameViewDidResize:(UIView *)view;
 
+// --- Separate GamePad screen (dual-screen layouts, iPhone Duo). Main thread only. ---
+
+/// Shows the GamePad (DRC) screen in its own view, like Cemu's desktop "separate GamePad view" window: Cemu then draws
+/// the TV image in the game view and the GamePad image here, every frame. No-op before the renderer exists or when
+/// already attached to `view`.
+- (void)attachGamePadView:(UIView *)view;
+/// Closes the separate GamePad screen; the GamePad image is only reachable through the "screen" button again.
+- (void)detachGamePadView;
+/// YES while a GamePad view is attached.
+@property (nonatomic, readonly) BOOL gamePadViewAttached;
+/// Call when the attached GamePad view changes size.
+- (void)gamePadViewDidResize:(UIView *)view;
+/// Touch on the GamePad view, normalized to [0, 1] with a top-left origin. Becomes GamePad touchscreen input.
+- (void)setGamePadViewTouchDown:(BOOL)down x:(float)x y:(float)y;
+
 /// Hands a user-selected Wii U title to Cemu's existing title-loading/boot path
 /// (TitleInfo -> CafeTitleList -> CafeSystem::PrepareForegroundTitle -> CafeSystem::LaunchForegroundTitle).
 /// `url` comes from the Files picker and may be security-scoped; access is held for the rest of the session
