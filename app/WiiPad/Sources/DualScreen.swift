@@ -189,13 +189,19 @@ struct DualControlsPanel: View {
         let shoulderW = min((side - 16) / 2, 70 * s), shoulderH = 40 * s
 
         ZStack(alignment: .topLeading) {
+            // a thin rim around the GamePad screen
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .stroke(Color.white.opacity(0.16), lineWidth: 1)
+                .frame(width: pad.width + 6, height: pad.height + 6)
+                .offset(x: pad.minX - panel.minX - 3, y: pad.minY - panel.minY - 3)
+
             // shoulders
             HStack(spacing: 8) {
-                PadButton(title: "ZL", button: .zl, width: shoulderW, height: shoulderH, circle: false)
-                PadButton(title: "L", button: .l, width: shoulderW, height: shoulderH, circle: false)
+                PadButton(title: "ZL", button: .zl, width: shoulderW, height: shoulderH, shape: .capsule)
+                PadButton(title: "L", button: .l, width: shoulderW, height: shoulderH, shape: .capsule)
                 Spacer()
-                PadButton(title: "R", button: .r, width: shoulderW, height: shoulderH, circle: false)
-                PadButton(title: "ZR", button: .zr, width: shoulderW, height: shoulderH, circle: false)
+                PadButton(title: "R", button: .r, width: shoulderW, height: shoulderH, shape: .capsule)
+                PadButton(title: "ZR", button: .zr, width: shoulderW, height: shoulderH, shape: .capsule)
             }
             .padding(.horizontal, 8)
             .frame(width: panel.width)
@@ -204,8 +210,7 @@ struct DualControlsPanel: View {
             // left column
             VStack(spacing: 10 * s) {
                 PadStick(stick: 0, diameter: stick)
-                PadDiamond(top: ("▲", .up), left: ("◀", .left), right: ("▶", .right), bottom: ("▼", .down),
-                           size: diamond, circle: false)
+                PadDPad(size: diamond)
             }
             .frame(width: side)
             .offset(y: 52 * s)
@@ -220,8 +225,8 @@ struct DualControlsPanel: View {
 
             // − / + under the GamePad screen
             HStack(spacing: 24 * s) {
-                PadButton(title: "−", button: .minus, width: 44 * s, height: 32 * s)
-                PadButton(title: "+", button: .plus, width: 44 * s, height: 32 * s)
+                PadButton(systemImage: "minus", button: .minus, width: 44 * s, height: 30 * s, shape: .capsule)
+                PadButton(systemImage: "plus", button: .plus, width: 44 * s, height: 30 * s, shape: .capsule)
             }
             .frame(width: panel.width)
             .offset(y: pad.maxY - panel.minY + 10 * s)
@@ -230,25 +235,15 @@ struct DualControlsPanel: View {
     }
 }
 
-// MARK: - Screens menu (toolbar)
-
-struct ScreensMenu: View {
-    @Binding var setting: ScreensSetting
-    let current: ScreenArrangement.Kind
+/// Surface behind the stacked layout's lower half (drawn under the GamePad view): soft dark gradient, hairline at the top.
+struct DualPanelBackground: View {
+    let panel: CGRect
 
     var body: some View {
-        Menu {
-            Picker("Screens", selection: $setting) {
-                ForEach(ScreensSetting.allCases) { choice in
-                    Text(choice.title).tag(choice)
-                }
-            }
-        } label: {
-            ToolbarLabel(systemImage: current == .single ? "rectangle" : "rectangle.split.1x2",
-                         label: setting == .auto ? "Screens" : setting.title)
-        }
-        .onChange(of: setting) { value in
-            CemuBridge.shared.log("screens setting: \(value.rawValue)")
-        }
+        LinearGradient(colors: [Color(white: 0.09), Color(white: 0.04)], startPoint: .top, endPoint: .bottom)
+            .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) }
+            .frame(width: panel.width, height: panel.height)
+            .offset(x: panel.minX, y: panel.minY)
+            .allowsHitTesting(false)
     }
 }

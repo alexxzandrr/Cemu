@@ -6,6 +6,9 @@ import UIKit
 /// StikDebug again). Titles launched afterwards run on Cemu's recompiler.
 @MainActor
 final class JITModel: ObservableObject {
+    /// one model for the whole app (home screen status pill and Settings)
+    static let shared = JITModel()
+
     @Published var status = CemuBridge.shared.jitStatus
     @Published var ready = CemuBridge.shared.jitReady
     @Published var result: String?
@@ -91,7 +94,7 @@ final class JITModel: ObservableObject {
 }
 
 struct JITSection: View {
-    @StateObject private var model = JITModel()
+    @ObservedObject private var model = JITModel.shared
     @State private var useJIT = CemuBridge.shared.useJIT
     @Environment(\.scenePhase) private var scenePhase
 

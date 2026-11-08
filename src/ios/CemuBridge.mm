@@ -5,6 +5,7 @@
 #include "WiiPadDiagnostics.h"
 #include "WiiPadMotion.h"
 #include "WiiPadJIT.h"
+#include "WiiPadPause.h"
 #include "audio/IAudioAPI.h"
 
 #include "Cafe/CafeSystem.h"
@@ -404,7 +405,11 @@ namespace
 	// separate GamePad screen (main thread only)
 	__weak UIView* _padView;
 	BOOL _padAttached;
+	__weak UIView* _mainView; // the view passed to initializeRendererInView (main thread only)
 }
+
+// output resolution factor (outputScale), main thread only
+static float s_outputScale = 1.0f;
 
 + (CemuBridge*)shared
 {
@@ -594,6 +599,7 @@ namespace
 		windowInfo.window_main.backend = WindowSystem::WindowHandleInfo::Backend::UIKit;
 		windowInfo.window_main.display = nullptr;
 		windowInfo.window_main.surface = (__bridge void*)view;
+		_mainView = view;
 		windowInfo.canvas_main = windowInfo.window_main;
 		windowInfo.width = (int)points.width;
 		windowInfo.height = (int)points.height;
@@ -640,30 +646,44 @@ namespace
 	auto& windowInfo = WindowSystem::GetWindowInfo();
 	const int w = (int)points.width;
 	const int h = (int)points.height;
-	if (windowInfo.width == w && windowInfo.height == h && windowInfo.dpi_scale == (double)scale)
+	// outputScale: the drawable (and Cemu's notion of the window's pixel size) shrinks, the layer stretches it to the view
+	const int layerW = std::max(1, (int)lround(points.width * s_outputScale));
+	const int layerH = std::max(1, (int)lround(points.height * s_outputScale));
+	const int physW = (int)(layerW * scale);
+	const int physH = (int)(layerH * scale);
+	if (windowInfo.width == w && windowInfo.height == h && windowInfo.dpi_scale == (double)scale &&
+		windowInfo.phys_width == physW && windowInfo.phys_height == physH)
 		return;
 
 	// wxgui MainWindow::OnSizeEvent + MetalCanvas::OnResize
 	windowInfo.width = w;
 	windowInfo.height = h;
-	windowInfo.phys_width = (int)(points.width * scale);
-	windowInfo.phys_height = (int)(points.height * scale);
+	windowInfo.phys_width = physW;
+	windowInfo.phys_height = physH;
 	windowInfo.dpi_scale = scale;
-	MetalRenderer::GetInstance()->ResizeLayer({ w, h }, true);
-	WiiPadLog::Write(fmt::format("game view resized: {}x{} pt ({}x{} px)", w, h,
-		windowInfo.phys_width.load(), windowInfo.phys_height.load()));
+	MetalRenderer::GetInstance()->ResizeLayer({ layerW, layerH }, true);
+	WiiPadLog::Write(fmt::format("game view resized: {}x{} pt ({}x{} px, output scale {:.2f})", w, h,
+		physW, physH, s_outputScale));
 }
 
 // Fills Cemu's pad-window sizes from `view` (desktop: PadViewFrame::OnSizeEvent).
+// Layer size in points for `view` after outputScale (the drawable is this times the display scale).
+static Vector2i ScaledLayerSize(UIView* view)
+{
+	CGSize points = view.bounds.size;
+	return { std::max(1, (int)lround(points.width * s_outputScale)), std::max(1, (int)lround(points.height * s_outputScale)) };
+}
+
 static void SetPadWindowSize(UIView* view)
 {
 	CGSize points = view.bounds.size;
 	CGFloat scale = view.traitCollection.displayScale > 0 ? view.traitCollection.displayScale : 2.0;
+	const Vector2i layer = ScaledLayerSize(view);
 	auto& windowInfo = WindowSystem::GetWindowInfo();
 	windowInfo.pad_width = (int)points.width;
 	windowInfo.pad_height = (int)points.height;
-	windowInfo.phys_pad_width = (int)(points.width * scale);
-	windowInfo.phys_pad_height = (int)(points.height * scale);
+	windowInfo.phys_pad_width = (int)(layer.x * scale);
+	windowInfo.phys_pad_height = (int)(layer.y * scale);
 	windowInfo.pad_dpi_scale = scale;
 }
 
@@ -693,7 +713,7 @@ static void SetPadWindowSize(UIView* view)
 	SetPadWindowSize(view);
 	try
 	{
-		MetalRenderer::GetInstance()->InitializeLayer({ (sint32)points.width, (sint32)points.height }, false);
+		MetalRenderer::GetInstance()->InitializeLayer(ScaledLayerSize(view), false);
 	}
 	catch (const std::exception& ex)
 	{
@@ -735,10 +755,13 @@ static void SetPadWindowSize(UIView* view)
 	if (points.width < 1 || points.height < 1)
 		return;
 	auto& windowInfo = WindowSystem::GetWindowInfo();
-	if (windowInfo.pad_width == (int)points.width && windowInfo.pad_height == (int)points.height)
+	CGFloat scale = view.traitCollection.displayScale > 0 ? view.traitCollection.displayScale : 2.0;
+	const Vector2i layer = ScaledLayerSize(view);
+	if (windowInfo.pad_width == (int)points.width && windowInfo.pad_height == (int)points.height &&
+		windowInfo.phys_pad_width == (int)(layer.x * scale) && windowInfo.phys_pad_height == (int)(layer.y * scale))
 		return;
 	SetPadWindowSize(view);
-	MetalRenderer::GetInstance()->ResizeLayer({ (sint32)points.width, (sint32)points.height }, false);
+	MetalRenderer::GetInstance()->ResizeLayer(layer, false);
 	WiiPadLog::Write(fmt::format("GamePad view resized: {}x{} pt", (int)points.width, (int)points.height));
 }
 
@@ -747,6 +770,183 @@ static void SetPadWindowSize(UIView* view)
 	if (!_titleLaunched || !_padAttached)
 		return;
 	WiiPadInput::SetTouch(down, x, y, true);
+}
+
+- (float)outputScale
+{
+	return s_outputScale;
+}
+
+- (void)setOutputScale:(float)outputScale
+{
+	if (![NSThread isMainThread])
+		return;
+	const float clamped = std::clamp(outputScale, 0.4f, 1.0f);
+	if (std::abs(clamped - s_outputScale) < 0.001f)
+		return;
+	s_outputScale = clamped;
+	WiiPadLog::Write(fmt::format("output scale: {:.2f}", clamped));
+	if (UIView* view = _mainView)
+		[self gameViewDidResize:view];
+	if (_padAttached)
+		if (UIView* pad = _padView)
+			[self gamePadViewDidResize:pad];
+}
+
+- (NSUInteger)presentedFrameCount
+{
+	return (NSUInteger)LatteGPUState.frameCounter;
+}
+
+- (BOOL)pauseTitle:(NSString*)reason
+{
+	if (!_titleLaunched)
+		return NO;
+	return WiiPadPause::Pause(reason.UTF8String) ? YES : NO;
+}
+
+- (BOOL)resumeTitle:(NSString*)reason
+{
+	return WiiPadPause::Resume(reason.UTF8String) ? YES : NO;
+}
+
+- (BOOL)titlePaused
+{
+	return WiiPadPause::IsPaused() ? YES : NO;
+}
+
+// Decodes a TGA image (uncompressed or RLE true-colour, 24/32 bit; Wii U icons are 128x128 32 bit) to PNG data.
+static NSData* PNGFromTGA(const std::vector<uint8>& tga)
+{
+	if (tga.size() < 18)
+		return nil;
+	const uint8 idLength = tga[0];
+	const uint8 colorMapType = tga[1];
+	const uint8 imageType = tga[2];
+	const int width = tga[12] | (tga[13] << 8);
+	const int height = tga[14] | (tga[15] << 8);
+	const int bpp = tga[16];
+	const bool topDown = (tga[17] & 0x20) != 0;
+	if (colorMapType != 0 || (imageType != 2 && imageType != 10) || (bpp != 24 && bpp != 32) ||
+		width <= 0 || height <= 0 || width > 1024 || height > 1024)
+		return nil;
+	const int bytesPerPixel = bpp / 8;
+	size_t pos = 18 + idLength;
+	std::vector<uint8> rgba((size_t)width * height * 4);
+	auto storePixel = [&](size_t index, const uint8* px) {
+		const size_t row = index / width, col = index % width;
+		const size_t y = topDown ? row : (height - 1 - row);
+		uint8* dst = &rgba[(y * width + col) * 4];
+		dst[0] = px[2]; dst[1] = px[1]; dst[2] = px[0]; // BGR(A) -> RGBA
+		dst[3] = bytesPerPixel == 4 ? px[3] : 255;
+	};
+	const size_t pixelCount = (size_t)width * height;
+	if (imageType == 2)
+	{
+		if (tga.size() < pos + pixelCount * bytesPerPixel)
+			return nil;
+		for (size_t i = 0; i < pixelCount; i++)
+			storePixel(i, &tga[pos + i * bytesPerPixel]);
+	}
+	else
+	{
+		size_t i = 0;
+		while (i < pixelCount)
+		{
+			if (pos >= tga.size())
+				return nil;
+			const uint8 header = tga[pos++];
+			const size_t count = (header & 0x7F) + 1;
+			if (header & 0x80)
+			{
+				if (pos + bytesPerPixel > tga.size())
+					return nil;
+				for (size_t k = 0; k < count && i < pixelCount; k++)
+					storePixel(i++, &tga[pos]);
+				pos += bytesPerPixel;
+			}
+			else
+			{
+				if (pos + count * bytesPerPixel > tga.size())
+					return nil;
+				for (size_t k = 0; k < count && i < pixelCount; k++)
+					storePixel(i++, &tga[pos + k * bytesPerPixel]);
+				pos += count * bytesPerPixel;
+			}
+		}
+	}
+
+	CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+	CGContextRef ctx = CGBitmapContextCreate(rgba.data(), width, height, 8, width * 4, colorSpace,
+		kCGImageAlphaPremultipliedLast);
+	CGColorSpaceRelease(colorSpace);
+	if (!ctx)
+		return nil;
+	// CGBitmapContext expects premultiplied alpha
+	for (size_t i = 0; i < pixelCount; i++)
+	{
+		uint8* p = &rgba[i * 4];
+		if (p[3] != 255) { p[0] = p[0] * p[3] / 255; p[1] = p[1] * p[3] / 255; p[2] = p[2] * p[3] / 255; }
+	}
+	CGImageRef cgImage = CGBitmapContextCreateImage(ctx);
+	CGContextRelease(ctx);
+	if (!cgImage)
+		return nil;
+	UIImage* image = [UIImage imageWithCGImage:cgImage];
+	CGImageRelease(cgImage);
+	return UIImagePNGRepresentation(image);
+}
+
+- (nullable NSDictionary<NSString*, id>*)inspectTitleAtURL:(NSURL*)url
+{
+	if (!_coreInitialized)
+		return nil;
+	const BOOL access = [url startAccessingSecurityScopedResource];
+	NSDictionary* result = nil;
+	try
+	{
+		const fs::path path = _utf8ToPath(url.fileSystemRepresentation);
+		TitleInfo info{ path };
+		if (info.IsValid())
+		{
+			NSMutableDictionary* dict = [NSMutableDictionary dictionary];
+			dict[@"name"] = [NSString stringWithUTF8String:info.GetMetaTitleName().c_str()] ?: url.lastPathComponent;
+			dict[@"titleId"] = [NSString stringWithFormat:@"%016llx", (unsigned long long)info.GetAppTitleId()];
+
+			// the game's own icon, like the desktop game list (wxGameList: meta/iconTex.tga, or .tga.gz)
+			const std::string mountPath = TitleInfo::GetUniqueTempMountingPath();
+			if (info.Mount(mountPath, "", FSC_PRIORITY_BASE))
+			{
+				auto tga = fsc_extractFile((mountPath + "/meta/iconTex.tga").c_str());
+				if (!tga)
+				{
+					tga = fsc_extractFile((mountPath + "/meta/iconTex.tga.gz").c_str());
+					if (tga)
+					{
+						auto decompressed = zlibDecompress(*tga, 70 * 1024);
+						std::swap(tga, decompressed);
+					}
+				}
+				info.Unmount(mountPath);
+				if (tga)
+					if (NSData* png = PNGFromTGA(*tga))
+						dict[@"icon"] = png;
+			}
+			result = dict;
+			WiiPadLog::Write(fmt::format("library: inspected \"{}\" ({:016x}){}", info.GetMetaTitleName(), info.GetAppTitleId(),
+				dict[@"icon"] ? "" : ", no icon"));
+		}
+		else
+			WiiPadLog::Write("library: " + ToStd(url.lastPathComponent) + " is not a Wii U title (" +
+				InvalidReasonText(info.GetInvalidReason()) + ")");
+	}
+	catch (const std::exception& ex)
+	{
+		WiiPadLog::Write(std::string("library: inspecting a title failed: ") + ex.what());
+	}
+	if (access)
+		[url stopAccessingSecurityScopedResource];
+	return result;
 }
 
 - (BOOL)multicoreCPU

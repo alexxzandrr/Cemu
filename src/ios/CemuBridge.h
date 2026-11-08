@@ -54,6 +54,28 @@ typedef NS_ENUM(NSInteger, WiiPadButton) {
 /// resize handlers. Main thread only; no-op before the renderer exists or when the size is unchanged.
 - (void)gameViewDidResize:(UIView *)view;
 
+// --- Performance, pause, library (Phase 5) ---
+
+/// Output resolution as a fraction of the screen's pixels (0.4 ... 1.0, default 1.0). Applies to the TV and GamePad
+/// views right away. The game itself still renders at its own resolution; this sets the size of the final image (less
+/// GPU work and memory traffic per frame: cooler, longer battery). Not stored: the app passes its setting in. Main thread.
+@property (nonatomic) float outputScale;
+
+/// Frames the game has presented so far (Cemu's swap counter). Sample twice to get frames per second.
+@property (nonatomic, readonly) NSUInteger presentedFrameCount;
+
+/// Pauses the running title (suspends its threads, stops the audio). `reason` goes to WiiPad.log. NO if nothing runs
+/// or it is already paused.
+- (BOOL)pauseTitle:(NSString *)reason;
+/// Undoes pauseTitle:.
+- (BOOL)resumeTitle:(NSString *)reason;
+@property (nonatomic, readonly) BOOL titlePaused;
+
+/// Reads a title's name, title ID and icon (meta/iconTex.tga, as PNG) without launching it, for the game library.
+/// Keys: "name" (NSString), "titleId" (NSString, 16 hex digits), "icon" (NSData PNG, may be missing). nil if `url` is
+/// not a Wii U title. Requires initializeCore. Blocking (mounts the title); call off the main thread.
+- (nullable NSDictionary<NSString *, id> *)inspectTitleAtURL:(NSURL *)url;
+
 // --- Separate GamePad screen (dual-screen layouts, iPhone Duo). Main thread only. ---
 
 /// Shows the GamePad (DRC) screen in its own view, like Cemu's desktop "separate GamePad view" window: Cemu then draws

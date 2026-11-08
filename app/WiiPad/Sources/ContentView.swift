@@ -2,9 +2,8 @@ import SwiftUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// Setup screen (Phase 1B/2A/2B/2E): initializes the Cemu core and the Metal renderer through CemuBridge,
-/// lets the user hand a Wii U title from the Files app to Cemu's boot path, then shows the game full screen
-/// with translucent on-screen GamePad controls over it. Not the final UI.
+/// Engine state: initializes the Cemu core and the Metal renderer through CemuBridge at startup, then hands the chosen
+/// game to Cemu's boot path. One game per app session (Cemu can't unload a title).
 @MainActor
 final class BootModel: ObservableObject {
     enum StepState { case pending, running, ok, failed }
@@ -16,17 +15,18 @@ final class BootModel: ObservableObject {
     }
 
     @Published var steps: [Step] = [
-        Step(id: "Cemu core (CemuCommonInit, CafeSystem)"),
+        Step(id: "Cemu core"),
         Step(id: "Metal renderer"),
-        Step(id: "Wii U title"),
+        Step(id: "Game"),
     ]
     @Published var finished = false
     @Published var shutDown = false
     @Published var loadingTitle = false
     @Published var titleLaunched = false
-    @Published var savedTitle: URL?
+    @Published var titleError: String?
 
     var readyForTitle: Bool { finished && steps[0].state == .ok && steps[1].state == .ok && !shutDown }
+    var coreFailed: Bool { steps[0].state == .failed || steps[1].state == .failed }
 
     private var started = false
 
@@ -71,26 +71,15 @@ final class BootModel: ObservableObject {
             steps[1].detail = error.localizedDescription
         }
         finished = true
-        savedTitle = CemuBridge.shared.savedTitleURL
+        // the library reads game names and icons through Cemu's filesystem
+        LibraryStore.shared.coreBecameReady(savedTitle: CemuBridge.shared.savedTitleURL)
         CemuBridge.shared.log("boot: finished")
-    }
-
-    func pickerOpened(_ kind: String) {
-        CemuBridge.shared.log("title picker opened (\(kind))")
-    }
-
-    func pickerFinished(_ result: Result<URL, Error>) {
-        switch result {
-        case .success(let url):
-            launchTitle(url)
-        case .failure(let error):
-            CemuBridge.shared.log("title picker failed: \(error.localizedDescription)")
-        }
     }
 
     /// Title identification and mounting block for a moment: run off the main thread.
     func launchTitle(_ url: URL) {
         guard !loadingTitle, !titleLaunched else { return }
+        titleError = nil
         loadingTitle = true
         steps[2].state = .running
         steps[2].detail = url.lastPathComponent
@@ -110,11 +99,13 @@ final class BootModel: ObservableObject {
         switch result {
         case .success(let name):
             steps[2].state = .ok
-            steps[2].detail = "\(name): handed to Cemu. Progress is logged to WiiPad.log."
+            steps[2].detail = "\(name): running. Progress is logged to WiiPad.log."
             titleLaunched = true
+            GameSession.shared.start()
         case .failure(let error):
             steps[2].state = .failed
             steps[2].detail = error.localizedDescription
+            titleError = error.localizedDescription
         }
     }
 
@@ -160,16 +151,17 @@ struct MetalHostView: UIViewRepresentable {
 
 struct ContentView: View {
     @StateObject private var model = BootModel()
+    @ObservedObject private var session = GameSession.shared
     @State private var showImporter = false
     @State private var importerTypes: [UTType] = [.folder]
-    @State private var multicoreCPU = CemuBridge.shared.multicoreCPU
-    @State private var asyncShaderCompile = CemuBridge.shared.asyncShaderCompile
+    @State private var showSettings = false
     @AppStorage("WiiPadScreens") private var screens: ScreensSetting = .auto
     @AppStorage("WiiPadControlsOpacity") private var controlsOpacity = 0.55
-    // not persisted: a title always starts with the controls shown
+    @AppStorage("WiiPadPauseWhenClosed") private var pauseWhenClosed = true
+    // not persisted: a game always starts with the controls shown
     @State private var controlsHidden = false
     @State private var lastArrangement: String = ""
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack {
@@ -179,23 +171,73 @@ struct ContentView: View {
             .ignoresSafeArea()
 
             if !model.titleLaunched {
-                setupPanel
+                AppBackground()
+                HomeView(model: model, onImport: openImporter, onPlay: play, onSettings: { showSettings = true })
+                    .transition(.opacity)
+            }
+            if model.loadingTitle {
+                LaunchView(name: session.current?.name ?? "Starting game",
+                           icon: session.current.flatMap { LibraryStore.shared.icon(for: $0) })
+                    .transition(.opacity)
+            }
+            if model.titleLaunched {
+                if session.menuOpen {
+                    QuickMenu(screens: $screens, controlsHidden: $controlsHidden, onSettings: { showSettings = true })
+                        .transition(.opacity)
+                } else if session.paused {
+                    PausedBanner()
+                        .transition(.opacity)
+                }
             }
         }
+        .animation(.easeInOut(duration: 0.25), value: model.loadingTitle)
+        .animation(.easeInOut(duration: 0.2), value: session.menuOpen)
+        .animation(.easeInOut(duration: 0.2), value: session.paused)
         .background(Color.black.ignoresSafeArea())
         .preferredColorScheme(.dark)
+        .tint(Theme.accent)
         .statusBarHidden(model.titleLaunched)
         .persistentSystemOverlays(model.titleLaunched ? .hidden : .automatic)
         // edge swipes (Control Center, Notification Center, Home) need a second swipe while playing
         .defersSystemGestures(on: model.titleLaunched ? .all : [])
         .fileImporter(isPresented: $showImporter, allowedContentTypes: importerTypes) { result in
-            model.pickerFinished(result)
+            switch result {
+            case .success(let url): LibraryStore.shared.add(url)
+            case .failure(let error): CemuBridge.shared.log("title picker failed: \(error.localizedDescription)")
+            }
         }
+        .sheet(isPresented: $showSettings) {
+            SettingsView(model: model, inGame: model.titleLaunched)
+        }
+        .onChange(of: scenePhase) { phase in
+            // pause while WiiPad isn't the active app (Control Center, app switcher, Home); resume on return
+            guard model.titleLaunched else { return }
+            session.setPause(phase != .active, reason: "background")
+        }
+        .modifier(HingePause(enabled: model.titleLaunched && pauseWhenClosed))
+    }
+
+    private func openImporter(_ kind: ImportKind) {
+        CemuBridge.shared.log("title picker opened (\(kind == .folder ? "folder" : "file"))")
+        importerTypes = kind == .folder ? [.folder] : [.item]
+        showImporter = true
+    }
+
+    private func play(_ entry: LibraryEntry) {
+        guard let url = LibraryStore.shared.resolve(entry) else {
+            model.titleError = "WiiPad can't find \(entry.name) anymore (moved or deleted?). Remove it and add it again."
+            return
+        }
+        Haptics.press()
+        session.current = entry
+        LibraryStore.shared.markPlayed(entry)
+        CemuBridge.shared.log("library: starting \(entry.name)")
+        model.launchTitle(url)
     }
 
     /// Game screens and controls in full-screen coordinates (the fold's coordinates). The TV view is always the first
-    /// child so SwiftUI never recreates it (that would detach Cemu's CAMetalLayer); only its frame changes. Before a
-    /// title runs it fills the screen behind the setup panel.
+    /// child and the GamePad view the third, so SwiftUI never recreates them (that would detach Cemu's CAMetalLayers);
+    /// only their frames change. Before a game runs the TV view fills the screen behind the home screen.
     @ViewBuilder
     private func screenLayer(_ geo: GeometryProxy) -> some View {
         let insets = geo.safeAreaInsets
@@ -204,11 +246,16 @@ struct ContentView: View {
         let running = model.titleLaunched
         let tv = running ? arrangement.tv : CGRect(origin: .zero, size: geo.size)
         let pad = running ? arrangement.pad : nil
+        let panel = running && arrangement.kind == .stacked ? arrangement.controlsPanel : nil
 
         ZStack(alignment: .topLeading) {
             MetalHostView { view in model.start(hostView: view) }
                 .frame(width: tv.width, height: tv.height)
                 .offset(x: tv.minX, y: tv.minY)
+
+            if let panel {
+                DualPanelBackground(panel: panel)
+            }
 
             PadHostView(active: pad != nil)
                 .frame(width: pad?.width ?? 1, height: pad?.height ?? 1)
@@ -217,24 +264,20 @@ struct ContentView: View {
                 .allowsHitTesting(pad != nil)
 
             if running {
-                switch arrangement.kind {
-                case .stacked:
-                    if let panel = arrangement.controlsPanel {
-                        DualControlsPanel(panel: panel)
-                            .opacity(controlsHidden ? 0 : controlsOpacity)
-                            .allowsHitTesting(!controlsHidden)
-                            .disabled(controlsHidden)
-                            .offset(x: panel.minX, y: panel.minY)
-                    }
-                    // toolbar only, over the top of the TV half
-                    GamePadOverlay(showControls: false, showPadViewToggle: false, controlsHidden: $controlsHidden,
-                                   screens: $screens, arrangement: arrangement.kind)
+                if let panel {
+                    DualControlsPanel(panel: panel)
+                        .opacity(controlsHidden ? 0 : max(controlsOpacity, 0.75))
+                        .allowsHitTesting(!controlsHidden)
+                        .disabled(controlsHidden)
+                        .offset(x: panel.minX, y: panel.minY)
+                    // bar only, over the top of the TV half
+                    GamePadOverlay(showControls: false, showSwap: false, controlsHidden: $controlsHidden)
                         .padding(EdgeInsets(top: insets.top, leading: insets.leading, bottom: 0, trailing: insets.trailing))
                         .frame(width: arrangement.tv.width, height: arrangement.tv.height)
                         .offset(x: arrangement.tv.minX, y: arrangement.tv.minY)
-                case .single, .sideBySide:
-                    GamePadOverlay(showControls: true, showPadViewToggle: arrangement.kind == .single,
-                                   controlsHidden: $controlsHidden, screens: $screens, arrangement: arrangement.kind)
+                } else {
+                    GamePadOverlay(showControls: true, showSwap: arrangement.kind == .single,
+                                   controlsHidden: $controlsHidden)
                         .padding(insets)
                         .frame(width: geo.size.width, height: geo.size.height)
                 }
@@ -247,112 +290,21 @@ struct ContentView: View {
             CemuBridge.shared.log("screens: \(description)")
         }
     }
+}
 
-    private var compact: Bool { horizontalSizeClass == .compact }
+/// Pauses the game while iPhone Duo is folded shut (like closing a handheld) and resumes when it opens.
+/// The hinge API needs the iOS 27.1 SDK; other devices have no hinge and never trigger it.
+struct HingePause: ViewModifier {
+    let enabled: Bool
 
-    @ViewBuilder
-    private var titleButtons: some View {
-        Button("Choose title folder…") {
-            model.pickerOpened("folder")
-            importerTypes = [.folder]
-            showImporter = true
-        }
-        Button("Choose title file…") {
-            model.pickerOpened("file")
-            importerTypes = [.item]
-            showImporter = true
-        }
-        if let saved = model.savedTitle {
-            Button("Reopen \(saved.lastPathComponent)") {
-                CemuBridge.shared.log("title selected from saved bookmark")
-                model.launchTitle(saved)
+    func body(content: Content) -> some View {
+        if #available(iOS 27.1, *) {
+            content.onHingeChange { _, context in
+                let closed = context.hinge?.status == .closed
+                GameSession.shared.setPause(enabled && closed, reason: "closed")
             }
-        }
-    }
-
-    private var setupPanel: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                Text("WiiPad")
-                    .font(.largeTitle.bold())
-                Text("Phase 4 · iPhone Duo and dual screens")
-                    .foregroundStyle(.secondary)
-
-                VStack(alignment: .leading, spacing: 12) {
-                    ForEach(model.steps) { step in
-                        HStack(alignment: .firstTextBaseline, spacing: 10) {
-                            icon(for: step.state)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(step.id)
-                                if !step.detail.isEmpty {
-                                    Text(step.detail)
-                                        .font(.footnote)
-                                        .foregroundStyle(step.state == .failed ? .red : .secondary)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if model.readyForTitle {
-                    // one row on iPad, a column on a phone screen
-                    ViewThatFits(in: .horizontal) {
-                        HStack(spacing: 12) { titleButtons }
-                        VStack(alignment: .leading, spacing: 10) { titleButtons }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(model.loadingTitle)
-                    Text("Folder: an extracted title's root (with code, content and meta). File: .wua, .wud, .wux, .wuhb or a homebrew .rpx. Disc images also need keys.txt in WiiPad's folder.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Toggle("Multi-core (experimental: three host threads for the three Wii U cores; recompiler or interpreter)", isOn: $multicoreCPU)
-                        .font(.footnote)
-                        .onChange(of: multicoreCPU) { enabled in
-                            CemuBridge.shared.multicoreCPU = enabled
-                        }
-                    Toggle("Async shader compilation (on: smoother, but objects can be missing until their shaders compile; off: brief hitches, nothing missing)", isOn: $asyncShaderCompile)
-                        .font(.footnote)
-                        .onChange(of: asyncShaderCompile) { enabled in
-                            CemuBridge.shared.asyncShaderCompile = enabled
-                        }
-                    Text("Compiled shaders are kept in Files › On My iPad › WiiPad › shaderCache and precompiled on the loading screen of the next launch.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                    Text("The game runs full screen with translucent GamePad controls. On iPhone Duo folded like a laptop, or on a tall screen, the TV image goes on top and the GamePad screen with the controls below; folded like a book, they sit side by side. \"Screens\" in the toolbar changes this. Touches on the GamePad screen (or that miss a control) are GamePad touchscreen input. To stop a title, close WiiPad from the app switcher.")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-
-                Divider()
-                JITSection()
-                Divider()
-
-                if model.finished {
-                    Button(model.shutDown ? "Core shut down" : "Shut down core") {
-                        model.shutdown()
-                    }
-                    .disabled(model.shutDown || model.loadingTitle)
-                }
-
-                Text("Logs: Files › On My iPad › WiiPad › WiiPad.log (also log.txt, stdout.txt)")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(compact ? 18 : 32)
-            .frame(maxWidth: 680, alignment: .leading)
-            .background(RoundedRectangle(cornerRadius: 20).fill(.ultraThinMaterial))
-            .padding(compact ? 10 : 40)
-            .frame(maxWidth: .infinity)
-        }
-    }
-
-    @ViewBuilder
-    private func icon(for state: BootModel.StepState) -> some View {
-        switch state {
-        case .pending: Image(systemName: "circle").foregroundStyle(.secondary)
-        case .running: ProgressView()
-        case .ok: Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-        case .failed: Image(systemName: "xmark.octagon.fill").foregroundStyle(.red)
+        } else {
+            content
         }
     }
 }
