@@ -179,13 +179,17 @@ jobs:
           set -euo pipefail
           APP="$RUNNER_TEMP/DerivedData/Build/Products/Release-iphoneos/WiiPad.app"
           test -d "$APP"
+          # Ad-hoc signature that only carries the entitlements (increased memory limit, get-task-allow): the
+          # sideloading tool re-signs with the user's certificate and keeps the entitlements their profile allows.
+          codesign --force --sign - --entitlements app/WiiPad/WiiPad.entitlements "$APP"
+          echo "== Entitlements in the IPA =="; codesign -d --entitlements - "$APP" 2>/dev/null || true
           {
             echo "== Binary =="; file "$APP/WiiPad"; lipo -info "$APP/WiiPad"
             echo "== Size =="; du -sh "$APP"; ls -l "$APP/WiiPad"
             echo "== Min OS / SDK =="; otool -l "$APP/WiiPad" | grep -A4 LC_BUILD_VERSION
             echo "== Linked libraries =="; otool -L "$APP/WiiPad"
             echo "== Info.plist =="; plutil -p "$APP/Info.plist"
-            echo "== Signature (expected: none) =="; codesign -dv "$APP" 2>&1 || true
+            echo "== Signature (ad-hoc, entitlements only) =="; codesign -dv "$APP" 2>&1 || true
           } | tee "$LOG_DIR/ipa-verify.log"
           # surface the key facts as notices (readable via the API)
           echo "::notice title=WiiPad binary::$(lipo -info "$APP/WiiPad" | sed 's/.*: //'), $(du -sh "$APP" | cut -f1), minos $(otool -l "$APP/WiiPad" | awk '/minos/{print $2; exit}'), sdk $(otool -l "$APP/WiiPad" | awk '/ sdk /{print $2; exit}')"

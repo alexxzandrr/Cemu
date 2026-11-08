@@ -308,7 +308,8 @@ struct QuickMenu: View {
         .confirmationDialog("Quit WiiPad?", isPresented: $confirmQuit, titleVisibility: .visible) {
             Button("Quit", role: .destructive) {
                 CemuBridge.shared.log("quit from the in-game menu")
-                exit(0)
+                // _exit: skip C++ static destructors, which tear down mutexes Cemu's threads are still using
+                _exit(0)
             }
         } message: {
             Text("Progress since your last in-game save will be lost. Cemu can't unload a game, so WiiPad closes; open it again to play something else.")
