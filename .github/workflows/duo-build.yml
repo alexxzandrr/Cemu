@@ -1,0 +1,107 @@
+name: WiiPad Duo build
+
+# WiiPad for iPhone Duo, based on EspressU v1.4 (https://espressu.dev). Same build as EspressU's README:
+#   1. StikJIT.xcframework (built-in JIT, from StikDebug/StikJIT, MPL-2.0)
+#   2. CMake builds the Cemu core as Cemu.framework (vcpkg dependencies for arm64-ios, cached)
+#   3. XcodeGen + xcodebuild build the app -> unsigned .ipa (ad-hoc signature carrying the entitlements)
+on:
+  push:
+    branches: [ duo ]
+  workflow_dispatch:
+
+concurrency:
+  group: duo-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-binary-cache
+
+jobs:
+  build:
+    runs-on: xcode-27
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Select Xcode (newest 27.x)
+        run: |
+          ls -d /Applications/Xcode*.app || true
+          pick=$(ls -d /Applications/Xcode_27.*.app 2>/dev/null | sort -V | tail -1 || true)
+          if [ -n "$pick" ]; then sudo xcode-select -s "$pick/Contents/Developer"; fi
+          xcodebuild -version
+
+      - name: Tools
+        run: |
+          brew install ninja xcodegen pkg-config autoconf automake libtool || true
+          cmake --version
+          xcodebuild -downloadComponent MetalToolchain || true
+          if command -v rustup >/dev/null; then rustup target add aarch64-apple-ios || true; fi
+
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: duo-vcpkg-${{ hashFiles('vcpkg.json', 'triplets/**', 'dependencies/vcpkg_overlay_ports*/**') }}-${{ github.run_id }}
+          restore-keys: duo-vcpkg-${{ hashFiles('vcpkg.json', 'triplets/**', 'dependencies/vcpkg_overlay_ports*/**') }}-
+
+      - name: Cache StikJIT
+        uses: actions/cache@v4
+        with:
+          path: |
+            dependencies/StikJIT.xcframework
+            dependencies/idevice
+            dependencies/.stikjit-commit
+          key: duo-stikjit-${{ hashFiles('ci/build-stikjit.sh') }}
+
+      - name: Build StikJIT
+        run: |
+          mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
+          ci/build-stikjit.sh
+
+      - name: Bootstrap vcpkg
+        run: ./dependencies/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+
+      - name: Configure Cemu core
+        run: |
+          cmake -S . -B build-ios -G Ninja \
+            -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_ARCHITECTURES=arm64 \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=17.4 -DVCPKG_TARGET_TRIPLET=arm64-ios \
+            -DBUILD_HEADLESS_DYLIB=ON -DCMAKE_MACOSX_BUNDLE=OFF -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build Cemu core
+        run: |
+          cmake --build build-ios --target CemuBin
+          mkdir -p build-ios/out && rm -rf build-ios/out/Cemu.framework
+          cp -R build-ios/src/Cemu.framework build-ios/out/
+
+      - name: Build app
+        run: |
+          cd src/ios
+          xcodegen generate
+          xcodebuild -project EspressU.xcodeproj -scheme EspressU -sdk iphoneos -configuration Release \
+            -derivedDataPath "$RUNNER_TEMP/DerivedData" CODE_SIGNING_ALLOWED=NO build | tail -40
+
+      - name: Package .ipa
+        id: package
+        run: |
+          APP=$(ls -d "$RUNNER_TEMP"/DerivedData/Build/Products/Release-iphoneos/*.app | head -1)
+          test -d "$APP"
+          # ad-hoc signature carrying the entitlements (increased memory limit, get-task-allow); the sideloading
+          # tool re-signs with your certificate
+          codesign --force --sign - --entitlements src/ios/Sideload.entitlements "$APP"
+          codesign -d --entitlements - "$APP" 2>/dev/null || true
+          mkdir -p ipa/Payload && cp -R "$APP" ipa/Payload/
+          SHA=$(git rev-parse --short HEAD)
+          (cd ipa && zip -qry "../WiiPad-Duo-unsigned-$SHA.ipa" Payload)
+          ls -la WiiPad-Duo-unsigned-*.ipa
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Upload .ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: WiiPad-Duo-unsigned-${{ steps.package.outputs.sha }}
+          path: WiiPad-Duo-unsigned-*.ipa
