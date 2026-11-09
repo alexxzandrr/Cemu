@@ -58,6 +58,20 @@ struct SettingsView: View {
 
                 ControllerSettingsSection()
 
+                Section {
+                    let games = LibraryStore.shared.sorted.filter { $0.titleId != nil }
+                    if games.isEmpty {
+                        Text("Add a game to the library first.").foregroundStyle(.secondary)
+                    }
+                    ForEach(games) { entry in
+                        NavigationLink(entry.name) { GameFixesView(entry: entry) }
+                    }
+                } header: {
+                    Text("Game fixes")
+                } footer: {
+                    Text("Per-game graphics options for rendering bugs. They apply the next time the game starts.")
+                }
+
                 Section("On-screen controls") {
                     VStack(alignment: .leading) {
                         Text("Opacity \(Int(controlsOpacity * 100)) %")
