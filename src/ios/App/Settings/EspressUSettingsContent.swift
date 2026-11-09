@@ -338,6 +338,15 @@ extension EspressUSettingsView {
                                        control: .toggle(values.bool(LocalScreenLayoutSettings.showSwapButtonKey,
                                                                     LocalScreenLayoutSettings.defaultShowSwapButton))))
         }
+        // WiiPad: iPhone Duo
+        screen += [
+            SettingsItem(id: "screen.duoFold", title: "Split at the fold (iPhone Duo)",
+                         detail: "Half-folded like a laptop: TV on top, GamePad and controls below. Like a book: TV and GamePad side by side.",
+                         control: .toggle(values.bool(DuoSettings.foldLayoutKey, DuoSettings.defaultFoldLayout))),
+            SettingsItem(id: "screen.duoPause", title: "Pause when closed (iPhone Duo)",
+                         detail: "Folding the phone shut pauses the game; opening it resumes.",
+                         control: .toggle(values.bool(DuoSettings.pauseOnCloseKey, DuoSettings.defaultPauseOnClose))),
+        ]
         screen += [
             SettingsItem(id: "screen.boost", title: "Brightness boost",
                          detail: "Lightens the picture beyond the screen's maximum.",

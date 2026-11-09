@@ -1375,6 +1375,11 @@ struct EmulatorViewOptimized: View {
     @State private var controllerConnected: Bool?
     @State private var padShownDespiteController = false
     @State private var pausedByLifecycle = false
+    // WiiPad: iPhone Duo fold layout and pause on close
+    @State private var duoPose: DuoFoldPose?
+    @State private var pausedByHinge = false
+    @AppStorage(DuoSettings.foldLayoutKey) private var duoFoldLayout = DuoSettings.defaultFoldLayout
+    @AppStorage(DuoSettings.pauseOnCloseKey) private var duoPauseOnClose = DuoSettings.defaultPauseOnClose
     private static let titlePauseQueue = DispatchQueue(label: "espressu.title.pause", qos: .userInitiated)
     @State private var cremaScreens = CremaScreenState()
     @State private var topBarHeight: CGFloat = 0
@@ -1429,6 +1434,7 @@ struct EmulatorViewOptimized: View {
     private func togglePause() {
         isPaused.toggle()
         pausedByLifecycle = false
+        pausedByHinge = false
         cemu_bridge_release_all_buttons()
         setTitlePaused(isPaused)
     }
@@ -1663,7 +1669,7 @@ struct EmulatorViewOptimized: View {
                 CremaPad(
                     screens: cremaScreens,
                     enabled: !isPaused && !isEditingControlLayout,
-                    topInset: isPhonePortrait ? 0 : topBarHeight,
+                    topInset: cremaTopInset,
                     editing: isEditingSingleControls,
                     selection: $selectedControl
                 )
@@ -1802,6 +1808,20 @@ struct EmulatorViewOptimized: View {
                 pausedByLifecycle = true
             }
             if isPaused { setTitlePaused(true) }
+        }
+        .onDuoClosedChange { closed in
+            if closed {
+                guard duoPauseOnClose, gameManager.emulationState == .running, !isPaused else { return }
+                cemu_bridge_release_all_buttons()
+                cemu_bridge_set_pad_touch(0, 0, false)
+                isPaused = true
+                pausedByHinge = true
+                setTitlePaused(true)
+            } else if pausedByHinge {
+                pausedByHinge = false
+                isPaused = false
+                setTitlePaused(false)
+            }
         }
         .onValueChange(of: isPadViewVisible) { visible in
             if !visible { padControlsHidden = false }
@@ -2000,8 +2020,13 @@ struct EmulatorViewOptimized: View {
         GeometryReader { geometry in
             let portrait = geometry.size.height >= geometry.size.width
             let phonePortrait = UIDevice.current.userInterfaceIdiom == .phone && portrait
+            let pose = duoFoldLayout && displayRouter.placement != .dualScreen
+                ? DuoFoldPose(fold: duoActiveFold(in: geometry)) : nil
 
-            if phonePortrait {
+            Group {
+            if let pose {
+                duoFoldComposition(pose, size: geometry.size)
+            } else if phonePortrait {
                 screensSizeLayout(in: geometry.size)
             } else if screenLayout == .smallGamePadTopRight && displayRouter.placement != .dualScreen {
                 let padWidth = geometry.size.width * 0.25
@@ -2021,6 +2046,8 @@ struct EmulatorViewOptimized: View {
             } else {
                 HStack(spacing: 0) { screens }
             }
+            }
+            .task(id: pose) { if duoPose != pose { duoPose = pose } }
         }
         .ignoresSafeArea(.all, edges: verticalSizeClass == .regular ? .horizontal : .all)
         .trackCremaScreens($cremaScreens)
@@ -2028,10 +2055,47 @@ struct EmulatorViewOptimized: View {
         .onValueChange(of: screenLayout) { _ in updateVisibleOutputs() }
         .onValueChange(of: localSwapped) { _ in updateVisibleOutputs() }
         .onValueChange(of: displayRouter.placement) { _ in updateVisibleOutputs() }
+        .onValueChange(of: duoPose) { _ in updateVisibleOutputs() }
         .onDisappear {
             DisplayRouter.shared.updateLocalVisibleOutputs(showTV: true, showPad: false)
             cemu_bridge_set_pad_touch(0, 0, false)
         }
+    }
+
+    /// WiiPad: half-folded iPhone Duo. Laptop pose: TV above the fold, GamePad screen centred at the top of the
+    /// lower half with the touch controls around it. Book pose: TV on the left, GamePad screen on the right.
+    @ViewBuilder
+    private func duoFoldComposition(_ pose: DuoFoldPose, size: CGSize) -> some View {
+        switch pose {
+        case .laptop(let fold):
+            let lower = max(size.height - fold.maxY, 1)
+            let padWidth = min(size.width * 0.44, lower * 0.5 * 16 / 9)
+            let padHeight = padWidth * 9 / 16
+            ZStack(alignment: .topLeading) {
+                screenView(main: true)
+                    .frame(width: size.width, height: max(fold.minY, 1))
+                padScreen
+                    .frame(width: padWidth, height: padHeight)
+                    .position(x: size.width / 2, y: fold.maxY + 10 + padHeight / 2)
+            }
+            .frame(width: size.width, height: size.height, alignment: .topLeading)
+        case .book(let fold):
+            HStack(spacing: 0) {
+                screenView(main: true)
+                    .frame(width: max(fold.minX, 1), height: size.height)
+                Color.black.frame(width: fold.width)
+                padScreen
+                    .aspectRatio(16 / 9, contentMode: .fit)
+                    .frame(width: max(size.width - fold.maxX, 1), height: size.height)
+            }
+            .frame(width: size.width, height: size.height)
+        }
+    }
+
+    /// Crema's top edge: in the laptop pose the controls live below the fold.
+    private var cremaTopInset: CGFloat {
+        if case .laptop(let fold)? = duoPose { return fold.maxY }
+        return isPhonePortrait ? 0 : topBarHeight
     }
 
     private var visibleScreens: [Bool] {
@@ -2105,11 +2169,11 @@ struct EmulatorViewOptimized: View {
     }
 
     private var isPadViewVisible: Bool {
-        visibleScreens.contains(false) || padIsOnDeviceInDualScreen
+        duoPose != nil || visibleScreens.contains(false) || padIsOnDeviceInDualScreen
     }
 
     private func updateVisibleOutputs() {
-        let both = displayRouter.placement == .dualScreen || screenLayout.showsBothScreens
+        let both = displayRouter.placement == .dualScreen || screenLayout.showsBothScreens || duoPose != nil
         DisplayRouter.shared.updateLocalVisibleOutputs(showTV: both || !localSwapped, showPad: both || localSwapped)
         if !both && !localSwapped {
             cemu_bridge_set_pad_touch(0, 0, false)
