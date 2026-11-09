@@ -81,6 +81,10 @@ final class ControllerManager: ObservableObject {
         controller = c
         name = c.vendorName ?? "Controller"
         homeHeld = false
+        rumbleGaveUp = false
+        rumbleFailures = 0
+        hapticEngine = nil
+        rumblePlayer = nil
         c.playerIndex = .index1
         c.handlerQueue = eventQueue
         if let pad = c.extendedGamepad {
@@ -219,19 +223,44 @@ final class ControllerManager: ObservableObject {
         rumbleTimer?.invalidate()
         rumbleTimer = nil
         let wanted = UserDefaults.standard.object(forKey: Self.rumbleKey) as? Bool ?? true
-        guard wanted, GameSession.shared.running, let haptics = controller?.haptics else {
+        guard wanted, GameSession.shared.running, controller?.haptics != nil, !rumbleGaveUp else {
             stopRumble()
             return
-        }
-        if hapticEngine == nil {
-            hapticEngine = haptics.createEngine(withLocality: .default)
-            hapticEngine?.isAutoShutdownEnabled = true
-            try? hapticEngine?.start()
         }
         // Cemu sets the GamePad's rumble state; follow it at 30 Hz
         rumbleTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.followRumble() }
         }
+    }
+
+    private var rumbleFailures = 0
+    private var rumbleGaveUp = false
+    private var engineNeedsStart = true
+
+    /// The controller's haptic engine: the grip motors ("handles") when the controller has them (DualSense,
+    /// DualShock 4), otherwise its default locality. Rebuilt when the haptics service resets.
+    private func makeEngine() -> CHHapticEngine? {
+        guard let haptics = controller?.haptics else { return nil }
+        let locality: GCHapticsLocality = haptics.supportedLocalities.contains(.handles) ? .handles : .default
+        guard let engine = haptics.createEngine(withLocality: locality) else {
+            CemuBridge.shared.log("controllers: no haptic engine for locality \(locality.rawValue)")
+            return nil
+        }
+        engine.playsHapticsOnly = true
+        engine.stoppedHandler = { [weak self] reason in
+            Task { @MainActor in
+                self?.engineNeedsStart = true
+                self?.rumblePlayer = nil
+            }
+        }
+        engine.resetHandler = { [weak self] in
+            Task { @MainActor in
+                self?.engineNeedsStart = true
+                self?.rumblePlayer = nil
+            }
+        }
+        engineNeedsStart = true
+        return engine
     }
 
     private func followRumble() {
@@ -242,26 +271,53 @@ final class ControllerManager: ObservableObject {
     }
 
     private func startRumble() {
-        guard let engine = hapticEngine else { return }
         do {
+            try startRumbleOnce()
+            rumbleFailures = 0
+        } catch {
+            // the haptics service may have gone away: rebuild the engine once and retry
+            hapticEngine = nil
+            rumblePlayer = nil
+            do {
+                try startRumbleOnce()
+                rumbleFailures = 0
+            } catch {
+                rumbleFailures += 1
+                if rumbleFailures <= 2 {
+                    CemuBridge.shared.log("controllers: rumble failed: \(error.localizedDescription)")
+                }
+                if rumbleFailures >= 5 {
+                    rumbleGaveUp = true
+                    rumbleTimer?.invalidate()
+                    rumbleTimer = nil
+                    CemuBridge.shared.log("controllers: rumble keeps failing on this controller; turned off until the controller reconnects")
+                }
+            }
+        }
+    }
+
+    private func startRumbleOnce() throws {
+        if hapticEngine == nil { hapticEngine = makeEngine() }
+        guard let engine = hapticEngine else { throw CocoaError(.featureUnsupported) }
+        if engineNeedsStart {
             try engine.start()
+            engineNeedsStart = false
+        }
+        if rumblePlayer == nil {
             let event = CHHapticEvent(eventType: .hapticContinuous,
                                       parameters: [CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.8),
                                                    CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.3)],
-                                      relativeTime: 0, duration: 30)
+                                      relativeTime: 0, duration: 10)
             let pattern = try CHHapticPattern(events: [event], parameters: [])
             let player = try engine.makeAdvancedPlayer(with: pattern)
-            player.loopEnabled = true // rumble longer than the event keeps going until the game stops it
-            try player.start(atTime: CHHapticTimeImmediate)
+            player.loopEnabled = true // keeps going until the game stops the rumble
             rumblePlayer = player
-        } catch {
-            CemuBridge.shared.log("controllers: rumble failed: \(error.localizedDescription)")
         }
+        try rumblePlayer?.start(atTime: CHHapticTimeImmediate)
     }
 
     private func stopRumble() {
         try? rumblePlayer?.stop(atTime: CHHapticTimeImmediate)
-        rumblePlayer = nil
         rumbling = false
     }
 
