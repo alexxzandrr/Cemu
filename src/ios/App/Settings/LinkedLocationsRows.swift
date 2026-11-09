@@ -32,7 +32,7 @@ struct LinkedLocationsRows: View {
                 Label("Link a game file\u{2026}", systemImage: "link")
                     .font(.subheadline.weight(.semibold))
             }
-            Text("Linked games stay where they are. EspressU never copies, moves or deletes them. A game on a drive that isn't connected stays in the library until you plug the drive back in.")
+            Text("Linked games stay where they are. WiiPad never copies, moves or deletes them. A game on a drive that isn't connected stays in the library until you plug the drive back in.")
                 .font(.caption)
                 .foregroundColor(EspressUTheme.brownMid)
         }

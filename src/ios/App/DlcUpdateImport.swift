@@ -47,7 +47,7 @@ enum DlcUpdateImport {
                 case 3:
                     return "This file is encrypted and no matching key is installed. Add your keys.txt in Settings first."
                 case 4:
-                    return "This folder is missing title.tik (the ticket), which EspressU needs to decrypt it."
+                    return "This folder is missing title.tik (the ticket), which WiiPad needs to decrypt it."
                 case 5:
                     return "Meta files (app.xml, meta.xml, cos.xml) are missing or damaged."
                 case 6:
@@ -55,7 +55,7 @@ enum DlcUpdateImport {
                 case 7:
                     return "This encrypted folder's title.tik couldn't be read."
                 case 8:
-                    return "EspressU couldn't decrypt this folder. Its title.tik doesn't unlock the .app files."
+                    return "WiiPad couldn't decrypt this folder. Its title.tik doesn't unlock the .app files."
                 case 9:
                     return "This encrypted folder is missing one or more .app files listed in its title.tmd."
                 default:

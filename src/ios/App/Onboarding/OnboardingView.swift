@@ -182,7 +182,7 @@ private struct OnboardingFactRow: View {
 private struct OnboardingWelcomePage: View {
     var body: some View {
         OnboardingPageScaffold(
-            title: "Welcome to EspressU",
+            title: "Welcome to WiiPad",
             subtitle: "Play your own Wii U games. This takes a minute and you can skip any step.",
             hero: .mark
         ) {
@@ -201,7 +201,7 @@ private struct OnboardingKeysPage: View {
     var body: some View {
         OnboardingPageScaffold(
             title: "Your keys",
-            subtitle: "Encrypted Wii U games need a keys.txt dumped from your own Wii U. EspressU doesn't include one. Homebrew doesn't need it.",
+            subtitle: "Encrypted Wii U games need a keys.txt dumped from your own Wii U. WiiPad doesn't include one. Homebrew doesn't need it.",
             hero: .symbol("key.fill")
         ) {
             EspressUCard {
@@ -338,7 +338,7 @@ private struct OnboardingSpeedControlsPage: View {
                 VStack(alignment: .leading, spacing: 18) {
                     OnboardingFactRow(
                         systemImage: "bolt.fill",
-                        text: "Full speed needs a JIT enabler (StikJIT, SideStore or LiveContainer) attached at launch. Without one, EspressU still runs but much slower. Settings shows which you have."
+                        text: "Full speed needs a JIT enabler (StikJIT, SideStore or LiveContainer) attached at launch. Without one, WiiPad still runs but much slower. Settings shows which you have."
                     )
                     OnboardingFactRow(
                         systemImage: "checkmark.seal.fill",

@@ -110,7 +110,7 @@ struct BootFailureView: View {
     private var name: String { game.displayTitle ?? game.title }
 
     private static let crashLogHint =
-        "If you report this, share the EspressU report: Settings > Diagnostics > Share EspressU report."
+        "If you report this, share the WiiPad report: Settings > Diagnostics > Share WiiPad report."
 
     private var title: String {
         if needsCleanRestart { return "Restart needed before \(name)" }
@@ -127,12 +127,12 @@ struct BootFailureView: View {
     }
 
     private var plainLine: String {
-        if needsCleanRestart { return "Close EspressU and open it again from your Home Screen, then start a game." }
+        if needsCleanRestart { return "Close WiiPad and open it again from your Home Screen, then start a game." }
         if driveWasLost { return "The drive or folder this game is stored on was disconnected. Connect it again, go back and start the game again." }
-        if endedWhileRunning { return "The game stopped. Go back and try it again. If it keeps happening, close and reopen EspressU." }
+        if endedWhileRunning { return "The game stopped. Go back and try it again. If it keeps happening, close and reopen WiiPad." }
         if needsKeys { return "This game is encrypted, so it needs a keys.txt file to start." }
-        if let keysAdded { return "Added \(keysAdded) key\(keysAdded == 1 ? "" : "s"). Go back and start the game again. If it still won't start, close and reopen EspressU." }
-        return "This game didn't start. Try again. If it keeps happening, close and reopen EspressU."
+        if let keysAdded { return "Added \(keysAdded) key\(keysAdded == 1 ? "" : "s"). Go back and start the game again. If it still won't start, close and reopen WiiPad." }
+        return "This game didn't start. Try again. If it keeps happening, close and reopen WiiPad."
     }
 
     var body: some View {
@@ -227,7 +227,7 @@ struct BootFailureView: View {
 
             if needsCleanRestart {
                 Button(action: { fflush(nil); _exit(0) }) {
-                    Text("Close EspressU")
+                    Text("Close WiiPad")
                         .font(.subheadline.weight(.semibold))
                 }
                 .buttonStyle(EspressUPrimaryButtonStyle())
@@ -560,7 +560,7 @@ struct GameBrowserView: View {
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel("EspressU")
+            .accessibilityLabel("WiiPad")
 
             Spacer()
 
@@ -926,7 +926,7 @@ struct GameBrowserView: View {
                 guard let url = urls.first else { return }
                 do {
                     let count = try WiiUKeys.importKeys(from: url)
-                    dlcUpdateSuccessMessage = "Added \(count) key\(count == 1 ? "" : "s"). Games use them the next time you start one. If you've already started a game since opening EspressU, close and reopen EspressU first."
+                    dlcUpdateSuccessMessage = "Added \(count) key\(count == 1 ? "" : "s"). Games use them the next time you start one. If you've already started a game since opening WiiPad, close and reopen WiiPad first."
                 } catch {
                     dlcImportErrorMessage = error.localizedDescription
                 }
@@ -1301,8 +1301,8 @@ struct EmptyGamesView: View {
     private var lines: [String] {
         switch kind {
         case .emptyLibrary:
-            return ["Tap Import a Game, or put game files in Files > On My iPad > EspressU > Roms.",
-                    "Games you add there show up when you come back to EspressU."]
+            return ["Tap Import a Game, or put game files in Files > On My iPad > WiiPad > Roms.",
+                    "Games you add there show up when you come back to WiiPad."]
         case .noFavourites:
             return ["Tap the heart on a game to add it here."]
         case .noSearchMatch(let text):
@@ -1952,10 +1952,10 @@ struct EmulatorViewOptimized: View {
 
     private var stallAdvice: String {
         switch gameManager.videoStallKind {
-        case 2: return "iOS stopped running this game's graphics. Tap Quit Game. EspressU will then ask you to close and reopen it before the next game."
-        case 3: return "Tap Quit Game and reopen EspressU. After you quit, a lower Resolution (in Settings, Graphics) uses less memory."
-        case 4: return "iOS may close EspressU soon. Quit the game soon. After you quit, a lower Resolution (in Settings, Graphics) uses less memory."
-        case 5: return "The game is still running but the screen isn't taking frames. This goes away by itself if it recovers. If it doesn't, tap Quit Game and reopen EspressU."
+        case 2: return "iOS stopped running this game's graphics. Tap Quit Game. WiiPad will then ask you to close and reopen it before the next game."
+        case 3: return "Tap Quit Game and reopen WiiPad. After you quit, a lower Resolution (in Settings, Graphics) uses less memory."
+        case 4: return "iOS may close WiiPad soon. Quit the game soon. After you quit, a lower Resolution (in Settings, Graphics) uses less memory."
+        case 5: return "The game is still running but the screen isn't taking frames. This goes away by itself if it recovers. If it doesn't, tap Quit Game and reopen WiiPad."
         default: return "The picture has stopped while the game keeps running. This goes away by itself if the picture comes back."
         }
     }

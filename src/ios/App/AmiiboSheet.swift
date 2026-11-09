@@ -22,9 +22,9 @@ enum AmiiboStore {
 
         var errorDescription: String? {
             switch self {
-            case .unreadable: return "EspressU couldn't read that file."
+            case .unreadable: return "WiiPad couldn't read that file."
             case .tooLarge: return "That file is too big to be an amiibo dump (they are about 540 bytes)."
-            case .writeFailed: return "EspressU couldn't save a copy in Documents/amiibo."
+            case .writeFailed: return "WiiPad couldn't save a copy in Documents/amiibo."
             }
         }
     }
@@ -91,7 +91,7 @@ struct AmiiboSheet: View {
                                 .accessibilityAddTraits(.isStaticText)
                         }
                     } footer: {
-                        Text("Pick an amiibo dump (.bin or .nfc). EspressU keeps a copy in Documents/amiibo so you can scan it again with one tap. The game has to be asking for an amiibo when you scan.")
+                        Text("Pick an amiibo dump (.bin or .nfc). WiiPad keeps a copy in Documents/amiibo so you can scan it again with one tap. The game has to be asking for an amiibo when you scan.")
                     }
 
                     if !files.isEmpty {

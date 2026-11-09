@@ -21,7 +21,7 @@ struct FilesSettingsSection: View {
             InfoButton.footer(
                 "ROMs, saves, shader caches and keys.txt live in this folder.",
                 title: "Your Files",
-                text: "Normally this is Files \u{2192} On My iPhone/iPad \u{2192} EspressU. If you installed through LiveContainer, iOS lists the folder under LiveContainer instead; use the path shown above to find it.")
+                text: "Normally this is Files \u{2192} On My iPhone/iPad \u{2192} WiiPad. If you installed through LiveContainer, iOS lists the folder under LiveContainer instead; use the path shown above to find it.")
         }
         .foregroundColor(EspressUTheme.brownDarkest)
     }

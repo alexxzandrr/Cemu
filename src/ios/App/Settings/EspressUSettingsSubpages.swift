@@ -64,7 +64,7 @@ extension EspressUSettingsView {
                                           }))),
         ]
         if TimebaseScale.hasExplicitChoice {
-            items.append(SettingsItem(id: "clock.auto", title: "Let EspressU choose again",
+            items.append(SettingsItem(id: "clock.auto", title: "Let WiiPad choose again",
                                       detail: "Slows the clock by itself when a game doesn't start drawing.",
                                       control: .action("Reset", destructive: false, confirm: false, run: {
                                           TimebaseScale.clearChoice()
@@ -72,7 +72,7 @@ extension EspressUSettingsView {
                                       })))
         } else {
             items.append(SettingsItem(id: "clock.automatic", title: "Automatic",
-                                      detail: "EspressU slows the clock itself if a game doesn't start drawing. Picking a speed turns that off.",
+                                      detail: "WiiPad slows the clock itself if a game doesn't start drawing. Picking a speed turns that off.",
                                       control: .info("On", nil)))
         }
         return [SettingsGroup(id: "clock", title: "", items: items)]
@@ -228,7 +228,7 @@ extension EspressUSettingsView {
             SettingsItem(id: "link.file", title: "Link a game file", detail: "Play one file right where it is.",
                          control: .action("Link", destructive: false, confirm: false, run: { linkLocation([.item]) })),
             SettingsItem(id: "link.about", title: "Nothing is copied",
-                         detail: "Linked games stay where they are. EspressU never copies, moves or deletes them. Unlinking keeps your saves and options.",
+                         detail: "Linked games stay where they are. WiiPad never copies, moves or deletes them. Unlinking keeps your saves and options.",
                          control: .info("", nil)),
         ]
         var groups: [SettingsGroup] = []
@@ -292,7 +292,7 @@ extension EspressUSettingsView {
                                       })))
         }
         items.append(SettingsItem(id: "keys.files", title: "Or use Files",
-                                  detail: "Put keys.txt into the keys folder: Files › EspressU › keys.",
+                                  detail: "Put keys.txt into the keys folder: Files › WiiPad › keys.",
                                   control: .info("", nil)))
         return [SettingsGroup(id: "keys", title: "", items: items)]
     }
@@ -301,7 +301,7 @@ extension EspressUSettingsView {
         let path = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first?.path
             ?? "Could not resolve a Documents folder for this install."
         return [SettingsGroup(id: "files", title: "", items: [
-            SettingsItem(id: "files.where", title: "Files › On My iPad › EspressU",
+            SettingsItem(id: "files.where", title: "Files › On My iPad › WiiPad",
                          detail: "Games, saves, shader caches and keys.txt live here. Installed through LiveContainer, the folder is under LiveContainer instead.",
                          control: .info("", nil)),
             SettingsItem(id: "files.path", title: "Full path", detail: path,
@@ -318,7 +318,7 @@ extension EspressUSettingsView {
                          detail: "Every setting and every game's own options, in one file. Never your library, keys, accounts or theme.",
                          control: .action("Export", destructive: false, confirm: false, run: exportSettings)),
             SettingsItem(id: "backup.import", title: "Import settings",
-                         detail: "Replaces all settings with the file's. EspressU asks first.",
+                         detail: "Replaces all settings with the file's. WiiPad asks first.",
                          control: .action("Choose", destructive: false, confirm: false, run: chooseSettingsFile)),
         ])]
     }
@@ -484,7 +484,7 @@ extension EspressUSettingsView {
         }
         return [
             SettingsGroup(id: "licences.note", title: "", items: [
-                SettingsItem(id: "licences.own", title: "EspressU", detail: "EspressU's own source is licensed under the Mozilla Public License 2.0. Each component below keeps its own copyright and licence. Tap one to read its licence.",
+                SettingsItem(id: "licences.own", title: "WiiPad", detail: "WiiPad is based on EspressU (https://espressu.dev) and Cemu. Their source is licensed under the Mozilla Public License 2.0, except EspressU's own files (EspressU Licence) and the Crema touch controls (Crema Licence): non-commercial use only, with credit. Each component below keeps its own copyright and licence. Tap one to read its licence.",
                              control: .info("MPL-2.0", nil)),
             ]),
             SettingsGroup(id: "licences.list", title: "Included software", items: rows),
@@ -496,16 +496,16 @@ extension EspressUSettingsView {
         let version = "\(info["CFBundleShortVersionString"] as? String ?? "0.0") (\(info["CFBundleVersion"] as? String ?? "0"))"
         return [
             SettingsGroup(id: "about", title: "", items: [
-                SettingsItem(id: "about.version", title: "Version", detail: "EspressU is built on Cemu.", control: .info(version, nil)),
-                SettingsItem(id: "about.by", title: "Created by", control: .info("Amar", nil)),
-                SettingsItem(id: "about.github", title: "View on GitHub", detail: nil,
+                SettingsItem(id: "about.version", title: "Version", detail: "WiiPad is built on Cemu.", control: .info(version, nil)),
+                SettingsItem(id: "about.by", title: "WiiPad by", control: .info("alexxzandrr", nil)),
+                SettingsItem(id: "about.github", title: "WiiPad source code (GitHub)", detail: nil,
                              control: .action("Open", destructive: false, confirm: false, run: {
-                                 if let url = URL(string: "https://github.com/EspressU/EspressU-Emu") { UIApplication.shared.open(url) }
+                                 if let url = URL(string: "https://github.com/alexxzandrr/Cemu/tree/duo") { UIApplication.shared.open(url) }
                              })),
-                SettingsItem(id: "about.discord", title: "Join the Discord", detail: nil,
-                             control: .action("Open", destructive: false, confirm: false, run: {
-                                 if let url = URL(string: "https://discord.gg/espressu") { UIApplication.shared.open(url) }
-                             })),
+                // Credits required by the EspressU Licence and the Crema Licence, next to the source link.
+                SettingsItem(id: "about.credits", title: "Credits",
+                             detail: "This product includes work by EspressU (https://espressu.dev).\nEspressU (https://espressu.dev)\nCrema touch controls by EspressU (https://espressu.dev)\nWiiPad is an unofficial, non-commercial fork built on Cemu and EspressU (based on MuffinEMU by Void). EspressU does not endorse WiiPad. Wii U is a trademark of Nintendo; WiiPad is not affiliated with Nintendo.",
+                             control: .info("", nil)),
                 SettingsItem(id: "about.licences", title: "Open-source licences", control: .link("", .licences)),
             ]),
             SettingsGroup(id: "about.reset", title: "Reset", items: [

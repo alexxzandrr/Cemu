@@ -146,7 +146,7 @@ final class ThermalMonitor: ObservableObject {
             isThrottling = true
             DisplayRouter.shared.reapplyRenderScale(reason: "thermal state \(description)")
             cemu_bridge_log_line("iOS thermal: reduced render scale to battery saver while hot")
-            onNotice?("The device is hot, so EspressU made the picture softer to keep the game running. It goes back when the device cools.")
+            onNotice?("The device is hot, so WiiPad made the picture softer to keep the game running. It goes back when the device cools.")
         } else if !shouldThrottle && isThrottling {
             unwind(reason: "cooled to \(description)")
             onNotice?("The device has cooled down. The picture is back to normal.")

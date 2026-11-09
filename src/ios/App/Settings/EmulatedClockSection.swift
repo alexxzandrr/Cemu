@@ -38,14 +38,14 @@ struct EmulatedClockSection: View {
             .foregroundColor(EspressUTheme.brownDarkest)
 
             if TimebaseScale.hasExplicitChoice {
-                Button("Let EspressU choose again") {
+                Button("Let WiiPad choose again") {
                     TimebaseScale.clearChoice()
                     timebaseRaw = TimebaseScale.realTime.rawValue
                     resetCount += 1
                 }
                 .font(.subheadline.weight(.semibold))
             } else {
-                Text("Automatic: EspressU slows the clock itself if a game doesn't start drawing.")
+                Text("Automatic: WiiPad slows the clock itself if a game doesn't start drawing.")
                     .font(.system(size: 12))
                     .foregroundColor(EspressUTheme.secondaryText)
             }
@@ -53,9 +53,9 @@ struct EmulatedClockSection: View {
             SettingsSectionHeader("Emulated Clock", icon: "clock", accent: .core)
         } footer: {
             InfoButton.footer(
-                "\(timebase.summary) Changes how fast the game thinks time passes; it doesn't change how fast EspressU runs.",
+                "\(timebase.summary) Changes how fast the game thinks time passes; it doesn't change how fast WiiPad runs.",
                 title: "Emulated Clock",
-                text: "Until you choose a value, EspressU picks one itself: if a game hasn't started drawing after 12 seconds, it slows its clock a step (down to 1/64). Choosing a value here turns that off.\n\nWithout the recompiler the emulated CPU is much slower than the console's, so games can fall behind their own timers and never draw a frame. Slowing the game's clock gives them room. Emulation accuracy isn't affected.")
+                text: "Until you choose a value, WiiPad picks one itself: if a game hasn't started drawing after 12 seconds, it slows its clock a step (down to 1/64). Choosing a value here turns that off.\n\nWithout the recompiler the emulated CPU is much slower than the console's, so games can fall behind their own timers and never draw a frame. Slowing the game's clock gives them room. Emulation accuracy isn't affected.")
         }
         .foregroundColor(EspressUTheme.brownDarkest)
         .onReceive(NotificationCenter.default.publisher(for: .espressuSettingsWereReset)) { _ in

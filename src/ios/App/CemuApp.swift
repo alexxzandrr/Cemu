@@ -22,7 +22,7 @@ struct CemuApp: App {
         let build = info["CFBundleVersion"] as? String ?? "?"
         let release = info["EspressUReleaseCommit"] as? String ?? "unstamped"
         let core = info["EspressUCoreFingerprint"] as? String ?? "unstamped"
-        cemu_bridge_log_checkpoint("EspressU \(version) (build \(build)) release \(release), core \(core)")
+        cemu_bridge_log_checkpoint("WiiPad \(version) (build \(build)) release \(release), core \(core)")
 
         cemu_bridge_log_checkpoint("CemuApp.init() reached")
 

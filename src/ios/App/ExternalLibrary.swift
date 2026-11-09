@@ -146,9 +146,9 @@ final class ExternalLibrary: ObservableObject, @unchecked Sendable {
             case .accessDenied:
                 return "Couldn't access that location."
             case .notReadable(let name):
-                return "EspressU can't read \"\(name)\". If it's on a drive, make sure the drive is connected."
+                return "WiiPad can't read \"\(name)\". If it's on a drive, make sure the drive is connected."
             case .unsupportedFile(let name):
-                return "\"\(name)\" isn't a Wii U game file EspressU can read. It accepts .wua, .wux, .wud, .iso, .rpx, .elf and .wuhb files."
+                return "\"\(name)\" isn't a Wii U game file WiiPad can read. It accepts .wua, .wux, .wud, .iso, .rpx, .elf and .wuhb files."
             case .bookmarkFailed(let error):
                 return "Couldn't keep access to that location: \(error.localizedDescription)"
             }

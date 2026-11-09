@@ -126,7 +126,7 @@ extension EspressUSettingsView {
                              PerformanceTuning.applyToBridge()
                          })),
             SettingsItem(id: "tuning.diagnostics", title: "Log the experimental options",
-                         detail: "Every 5 seconds writes to log.txt what each option above did and whether it works, lines start with [Tuning]. log.txt is in EspressU's Logs folder in the Files app.",
+                         detail: "Every 5 seconds writes to log.txt what each option above did and whether it works, lines start with [Tuning]. log.txt is in WiiPad's Logs folder in the Files app.",
                          control: .toggle(values.bool(PerformanceTuning.diagnosticsLogKey, PerformanceTuning.diagnosticsLogDefault) { _ in
                              PerformanceTuning.applyToBridge()
                          })),
@@ -420,7 +420,7 @@ extension EspressUSettingsView {
                 } else {
                     UserDefaults.standard.set(false, forKey: key)
                     cemu_bridge_set_microphone_enabled(false)
-                    notes["audio.mic"] = "Allow the microphone for EspressU in iOS Settings first."
+                    notes["audio.mic"] = "Allow the microphone for WiiPad in iOS Settings first."
                 }
             }
         }
@@ -438,7 +438,7 @@ extension EspressUSettingsView {
             SettingsGroup(id: "files", title: "Your files", items: [
                 SettingsItem(id: "data.keys", title: "Wii U keys", detail: "Needed for encrypted dumps (.wud, .wux).",
                              control: .link("", .keys)),
-                SettingsItem(id: "data.files", title: "Files and storage", detail: "Where EspressU keeps games, saves and more.",
+                SettingsItem(id: "data.files", title: "Files and storage", detail: "Where WiiPad keeps games, saves and more.",
                              control: .link("", .files)),
                 SettingsItem(id: "data.backup", title: "Back up and restore", detail: "Save every setting to a file, or load one.",
                              control: .link("", .backup)),
@@ -475,12 +475,12 @@ extension EspressUSettingsView {
         ]
 
         let about: [SettingsItem] = [
-            SettingsItem(id: "sys.version", title: "Version", detail: "EspressU builds on Cemu.",
+            SettingsItem(id: "sys.version", title: "Version", detail: "WiiPad builds on Cemu.",
                          control: .info("\(Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0") (\(Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"))", nil)),
             SettingsItem(id: "sys.about", title: "About and licences", detail: "Credits and open-source licences.",
                          control: .link("", .about)),
             SettingsItem(id: "sys.reset", title: "Reset all settings",
-                         detail: "Back to how EspressU came, Built-in JIT and its pairing file included. Games, saves and keys stay. The welcome guide opens again.",
+                         detail: "Back to how WiiPad came, Built-in JIT and its pairing file included. Games, saves and keys stay. The welcome guide opens again.",
                          control: .action("Reset", destructive: true, confirm: true, run: {
                              SettingsDefaults.reset(includingPerGameOverrides: false)
                              UserDefaults.standard.set(SettingsMode.advanced.rawValue, forKey: SettingsMode.storageKey)
@@ -494,13 +494,6 @@ extension EspressUSettingsView {
             SettingsGroup(id: "look", title: "Look", items: look),
             SettingsGroup(id: "help", title: "Help", items: help),
             SettingsGroup(id: "about", title: "About", items: about),
-            SettingsGroup(id: "community", title: "Community", items: [
-                SettingsItem(id: "sys.discord", title: "Join the Discord",
-                             detail: "Opens the EspressU community server in your browser.",
-                             control: .action("Open", destructive: false, confirm: false, run: {
-                                 if let url = URL(string: "https://discord.gg/espressu") { UIApplication.shared.open(url) }
-                             })),
-            ]),
         ]
     }
 }

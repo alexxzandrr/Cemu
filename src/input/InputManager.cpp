@@ -117,10 +117,12 @@ int InputManager::default_pad_device_button(uint64 id)
 {
     switch (id)
     {
-    case VPADController::kButtonId_A:      return kGCBitA;
-    case VPADController::kButtonId_B:      return kGCBitB;
-    case VPADController::kButtonId_X:      return kGCBitX;
-    case VPADController::kButtonId_Y:      return kGCBitY;
+    // WiiPad: by position like a Wii U GamePad (right = A, bottom = B, top = X, left = Y; DualSense: O A, X B,
+    // triangle X, square Y). GameController names buttons by position: A bottom, B right, X left, Y top.
+    case VPADController::kButtonId_A:      return kGCBitB;
+    case VPADController::kButtonId_B:      return kGCBitA;
+    case VPADController::kButtonId_X:      return kGCBitY;
+    case VPADController::kButtonId_Y:      return kGCBitX;
     case VPADController::kButtonId_L:      return kGCBitLB;
     case VPADController::kButtonId_R:      return kGCBitRB;
     case VPADController::kButtonId_ZL:     return kGCBitLTDig;
@@ -168,10 +170,11 @@ static void apply_default_gc_mappings(EmulatedControllerPtr& emulated,
 
     if (t == Type::VPAD)
     {
-        map_button(VPADController::kButtonId_A,      kGCBitA);
-        map_button(VPADController::kButtonId_B,      kGCBitB);
-        map_button(VPADController::kButtonId_X,      kGCBitX);
-        map_button(VPADController::kButtonId_Y,      kGCBitY);
+        // WiiPad: Wii U GamePad positions (see default_pad_device_button)
+        map_button(VPADController::kButtonId_A,      kGCBitB);
+        map_button(VPADController::kButtonId_B,      kGCBitA);
+        map_button(VPADController::kButtonId_X,      kGCBitY);
+        map_button(VPADController::kButtonId_Y,      kGCBitX);
         map_button(VPADController::kButtonId_L,      kGCBitLB);
         map_button(VPADController::kButtonId_R,      kGCBitRB);
         map_button(VPADController::kButtonId_ZL,     kGCBitLTDig);

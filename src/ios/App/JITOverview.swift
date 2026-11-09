@@ -50,7 +50,7 @@ struct JITOverview {
             Check(id: "gta", title: "get-task-allow",
                   state: StikJITHelperLauncher.hostHasGetTaskAllow() ? .ok : .missing,
                   missingTitle: "get-task-allow missing",
-                  hint: "Reinstall EspressU with a signing method that keeps get-task-allow."),
+                  hint: "Reinstall WiiPad with a signing method that keeps get-task-allow."),
             Check(id: "pairing", title: "Pairing file", state: StikJITSetup.hasPairingFile ? .ok : .missing,
                   missingTitle: "Pairing file missing",
                   hint: "Pair this device or import a pairing file."),
@@ -75,7 +75,7 @@ struct JITOverview {
 
     var subtitle: String {
         if !enabled { return "Games run with the slow interpreter." }
-        if !vpnConnected && active { return "JIT stays on until you close EspressU. Turn LocalDevVPN back on to switch it on again later." }
+        if !vpnConnected && active { return "JIT stays on until you close WiiPad. Turn LocalDevVPN back on to switch it on again later." }
         if active { return "Games run with the fast recompiler." }
         if preparing { return stageText }
         if let missing { return missing.hint }

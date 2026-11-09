@@ -41,7 +41,7 @@ enum ExternalDisplaySceneAccessory {
         guard let host = rootViewController() else { return }
 
         let configuration = UISceneConfiguration(
-            name: "EspressU External Display",
+            name: "WiiPad External Display",
             sessionRole: .windowExternalDisplayNonInteractive)
         configuration.delegateClass = ExternalDisplaySceneDelegate.self
 

@@ -113,7 +113,7 @@ extension EspressUSettingsView {
             SettingsGroup(id: "srv.add", title: "Add", items: add),
             SettingsGroup(id: "srv.community", title: "Community servers", items: [
                 SettingsItem(id: "srv.mh3u", title: "MH3U Revival",
-                             detail: "A self-hosted server for Monster Hunter 3 Ultimate. Someone runs the host and gives you a network_services.xml to import. EspressU doesn't run or check it.",
+                             detail: "A self-hosted server for Monster Hunter 3 Ultimate. Someone runs the host and gives you a network_services.xml to import. WiiPad doesn't run or check it.",
                              control: .action("Open", destructive: false, confirm: false, run: {
                                  if let url = URL(string: "https://github.com/Matt-Wood-23/mh3u-revival") { UIApplication.shared.open(url) }
                              })),

@@ -192,7 +192,7 @@ enum GameSaveTransfer {
             case .noSaveYet:
                 return "There's no save for this game yet. Play it once, then export."
             case .unknownTitleId:
-                return "EspressU couldn't read this game's title ID, so it doesn't know where its save lives."
+                return "WiiPad couldn't read this game's title ID, so it doesn't know where its save lives."
             case .unrecognisedFolder:
                 return "That folder doesn't look like a Wii U save. Pick the folder named after the game's title ID, or the 'user' folder inside it."
             case .cancelled:

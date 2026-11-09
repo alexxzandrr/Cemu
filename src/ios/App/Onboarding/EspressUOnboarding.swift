@@ -153,7 +153,7 @@ struct EspressUOnboardingView: View {
                 EspressULogo(side: 140)
                     .shadow(color: EspressUTheme.shadow.opacity(0.11), radius: 18, y: 10)
                     .accessibilityHidden(true)
-                Text("Welcome to EspressU")
+                Text("Welcome to WiiPad")
                     .font(.system(.largeTitle).weight(.bold))
                     .foregroundColor(EspressUTheme.onBackground)
                     .multilineTextAlignment(.center)
@@ -199,7 +199,7 @@ struct EspressUOnboardingView: View {
                 bigButton(id: "folder", title: "Game folder", detail: "A dumped game with code, content and meta",
                           systemImage: "folder.fill", primary: false, action: chooseGameFolder)
                 bigButton(id: "files", title: "Put games in Files",
-                          detail: "Opens Files at EspressU › Roms. New games show up on their own.",
+                          detail: "Opens Files at WiiPad › Roms. New games show up on their own.",
                           systemImage: "folder.badge.plus", primary: false, action: openRomsInFiles)
                 keysRow
                 if case .copying(let name) = gameManager.importState {
@@ -299,8 +299,8 @@ struct EspressUOnboardingView: View {
             VStack(alignment: .leading, spacing: 16) {
                 pageHeading("Turn on full speed",
                             DevicePairing.isSupported
-                                ? "Built-in JIT switches on by itself when a game starts. For that, EspressU needs a pairing file for this device once."
-                                : "Built-in JIT switches on by itself when a game starts. For that, EspressU needs a pairing file for this device once. This iOS version can't make one itself, so you import one.")
+                                ? "Built-in JIT switches on by itself when a game starts. For that, WiiPad needs a pairing file for this device once."
+                                : "Built-in JIT switches on by itself when a game starts. For that, WiiPad needs a pairing file for this device once. This iOS version can't make one itself, so you import one.")
                 jitStatusCard
                 Text("No JIT? Games still start, just much slower.")
                     .font(.system(.subheadline))
@@ -317,7 +317,7 @@ struct EspressUOnboardingView: View {
                 } else {
                     stepCard(1, "Import a pairing file", "Built-in pairing needs iOS \(DevicePairing.minimumIOSVersion) or newer. Make a pairing file with iLoader or idevice_pair, then tap Import.")
                 }
-                stepCard(2, "Connect LocalDevVPN", "EspressU reaches the device through it. Wi-Fi works best.")
+                stepCard(2, "Connect LocalDevVPN", "WiiPad reaches the device through it. Wi-Fi works best.")
                 stepCard(3, "That's it", "JIT switches on by itself whenever LocalDevVPN is connected.")
             }
         }
@@ -387,7 +387,7 @@ struct EspressUOnboardingView: View {
                     .padding(.vertical, 6)
                     .background(Color.white.opacity(0.08), in: Capsule())
                 pageHeading("Play with a controller",
-                            "Pair it in Settings › Bluetooth. Xbox, PlayStation, Switch Pro and MFi controllers work, in games and in every menu of EspressU.")
+                            "Pair it in Settings › Bluetooth. Xbox, PlayStation, Switch Pro and MFi controllers work, in games and in every menu of WiiPad.")
                 Text("No controller? The touch controls show up on screen and hide as soon as a controller connects.")
                     .font(.system(.subheadline))
                     .foregroundColor(EspressUTheme.onBackgroundMuted)

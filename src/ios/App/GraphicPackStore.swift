@@ -194,7 +194,7 @@ final class GraphicPackStore: NSObject, ObservableObject {
         if force { notice = nil }
         var request = URLRequest(url: Self.latestReleaseAPI, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 20)
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("EspressU", forHTTPHeaderField: "User-Agent")
+        request.setValue("WiiPad", forHTTPHeaderField: "User-Agent")
         let task = URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             let outcome = Self.interpretLatestRelease(data: data, response: response, error: error)
             DispatchQueue.main.async {
@@ -245,7 +245,7 @@ final class GraphicPackStore: NSObject, ObservableObject {
         let asset = payload.assets.first { $0.name.hasPrefix("graphicPacks") && $0.name.hasSuffix(".zip") }
             ?? payload.assets.first { $0.name.hasSuffix(".zip") }
         guard let asset, isTrustedDownload(asset.browser_download_url) else {
-            return .failure("The latest release doesn't have a download EspressU can use.")
+            return .failure("The latest release doesn't have a download WiiPad can use.")
         }
         guard asset.size > 0, asset.size <= 256 * 1024 * 1024 else {
             return .failure("The latest release is a different size than graphic packs should be.")

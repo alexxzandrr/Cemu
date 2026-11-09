@@ -20,7 +20,7 @@ struct MiniZip {
         var errorDescription: String? {
             switch self {
             case .notAZip: return "The file isn't a valid zip archive."
-            case .unsupported(let what): return "The zip uses a feature EspressU can't read (\(what))."
+            case .unsupported(let what): return "The zip uses a feature WiiPad can't read (\(what))."
             case .corrupt(let what): return "The zip is damaged (\(what))."
             case .unsafePath(let name): return "The zip contains a path outside its own folder (\(name))."
             case .tooLarge: return "The zip is larger than graphic packs should be."

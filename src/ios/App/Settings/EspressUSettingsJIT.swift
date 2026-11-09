@@ -32,7 +32,7 @@ extension EspressUSettingsView {
                                                  control: .info("Not available", EspressUTheme.cautionText)))
                 break
             }
-            var detail = "No computer needed: EspressU shows up in Settings › Privacy & Security › Developer Mode."
+            var detail = "No computer needed: WiiPad shows up in Settings › Privacy & Security › Developer Mode."
             if case .paired(let device) = pairing.state {
                 detail = device.map { "Paired with \($0)." } ?? "Paired."
             }

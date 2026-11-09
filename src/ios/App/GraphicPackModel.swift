@@ -124,9 +124,9 @@ struct GraphicPack: Identifiable, Hashable {
         case "metal" where api != .metal:
             return .inactive("Only works with the Metal renderer. Switch the renderer in Settings > Graphics.")
         case "vulkan":
-            return .inactive("Made for Vulkan, which EspressU doesn't use.")
+            return .inactive("Made for Vulkan, which WiiPad doesn't use.")
         case "opengl":
-            return .inactive("Made for OpenGL, which EspressU doesn't use.")
+            return .inactive("Made for OpenGL, which WiiPad doesn't use.")
         default:
             break
         }

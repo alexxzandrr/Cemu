@@ -171,7 +171,7 @@ struct AudioSettingsSection: View {
             Button("Open Settings") { MicrophoneAccess.openSystemSettings() }
             Button("Not Now", role: .cancel) {}
         } message: {
-            Text("EspressU can't use your \(deviceName)'s microphone until you allow it in iOS Settings. Until then, games use the Blow button in the top bar instead.")
+            Text("WiiPad can't use your \(deviceName)'s microphone until you allow it in iOS Settings. Until then, games use the Blow button in the top bar instead.")
         }
 
         if microphoneEnabled {

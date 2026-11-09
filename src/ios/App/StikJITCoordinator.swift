@@ -41,13 +41,13 @@ enum StikJITSetup {
 
     static var unavailableReason: String? {
         if isInLiveContainer {
-            return "Built-in JIT doesn't work inside LiveContainer, because LiveContainer can't start EspressU's helper. Turn Use JIT off, or let LiveContainer switch JIT on."
+            return "Built-in JIT doesn't work inside LiveContainer, because LiveContainer can't start WiiPad's helper. Turn Use JIT off, or let LiveContainer switch JIT on."
         }
         guard #available(iOS 17.4, *) else {
             return "Built-in JIT needs iOS 17.4 or later."
         }
         if StikJITHelperLauncher.helperIdentifier() == nil {
-            return "This build of EspressU doesn't contain the JIT helper."
+            return "This build of WiiPad doesn't contain the JIT helper."
         }
         return nil
     }
@@ -88,8 +88,8 @@ enum StikJITSetup {
             return .failure(.init(title: "Built-in JIT isn't available", message: reason))
         }
         guard StikJITHelperLauncher.hostHasGetTaskAllow() else {
-            return .failure(.init(title: "EspressU can't get JIT",
-                                  message: "This installation does not have get-task-allow. Reinstall EspressU using a signing method that keeps this entitlement."))
+            return .failure(.init(title: "WiiPad can't get JIT",
+                                  message: "This installation does not have get-task-allow. Reinstall WiiPad using a signing method that keeps this entitlement."))
         }
         guard let data = try? Data(contentsOf: pairingFileURL), !data.isEmpty else {
             return .failure(.init(title: "Pairing file missing",
@@ -426,7 +426,7 @@ final class StikJITCoordinator: ObservableObject {
         case "checkingDDI": stageText = "Checking the Developer Disk Image…"
         case "mounting": stageText = "Mounting the Developer Disk Image…"
         case "verifying": stageText = "Checking the mount…"
-        case "prepared": stageText = job == .enable ? "Device ready. Attaching to EspressU…" : "Device ready."
+        case "prepared": stageText = job == .enable ? "Device ready. Attaching to WiiPad…" : "Device ready."
         case "script": stageText = "Running the JIT script…"
         default: break
         }

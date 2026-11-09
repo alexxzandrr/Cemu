@@ -213,7 +213,7 @@ enum CoverArtFetcher {
         await gate.acquire()
         defer { Task { try? await Task.sleep(nanoseconds: requestSpacing); await gate.release() } }
         var request = URLRequest(url: url)
-        request.setValue("EspressU", forHTTPHeaderField: "User-Agent")
+        request.setValue("WiiPad", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 30
         let (data, response) = try await URLSession.shared.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }

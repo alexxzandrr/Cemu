@@ -34,7 +34,7 @@ struct GameMetadata: Codable, Identifiable {
         if isExternal {
             return "\"\(cardName.name)\" is only linked, so its file stays where it is and isn't deleted. Your saves and options are kept. You can bring it back from Settings > Library."
         }
-        return "This deletes \"\(cardName.name)\" from EspressU to free up space. Your saves and options are kept. To play it again, add the game back."
+        return "This deletes \"\(cardName.name)\" from WiiPad to free up space. Your saves and options are kept. To play it again, add the game back."
     }
 
     static func installKey(forRomPath romPath: String, fallback: String) -> String {
@@ -750,7 +750,7 @@ class GameManager: ObservableObject {
         var errorDescription: String? {
             switch self {
             case .invalidROM:
-                return "This isn't a Wii U game file EspressU can read. It accepts .wua, .wux, .wud, .iso, .rpx, .elf and .wuhb files, or a game folder. Encrypted games also need keys.txt."
+                return "This isn't a Wii U game file WiiPad can read. It accepts .wua, .wux, .wud, .iso, .rpx, .elf and .wuhb files, or a game folder. Encrypted games also need keys.txt."
             case .notAWiiUDump(let name):
                 return "\"\(name)\" isn't a Wii U game dump. A dump folder needs code, content and meta folders inside it, or an encrypted game folder: title.tmd and title.tik next to its .app files."
             case .accessDenied:
@@ -967,7 +967,7 @@ class GameManager: ObservableObject {
         if let locationID = game.externalLocationID {
             guard !game.isUnavailable, let hold = ExternalLibrary.shared.acquire(locationID),
                   ExternalLibrary.isReachable(path: game.romPath) else {
-                lastStatusMessage = ExternalLibrary.unavailableMessage + ". \"\(game.cardName.name)\" is stored on a drive or folder EspressU can't reach right now."
+                lastStatusMessage = ExternalLibrary.unavailableMessage + ". \"\(game.cardName.name)\" is stored on a drive or folder WiiPad can't reach right now."
                 emulationState = .error
                 return
             }
@@ -977,7 +977,7 @@ class GameManager: ObservableObject {
         if cemu_bridge_clean_start_required() {
             needsCleanRestart = true
             let reason = String(cString: cemu_bridge_clean_start_reason())
-            lastStatusMessage = "EspressU has to be closed and reopened before it can start another game."
+            lastStatusMessage = "WiiPad has to be closed and reopened before it can start another game."
                 + (reason.isEmpty ? "" : "\n\nWhat happened: \(reason).")
             emulationState = .error
             return
@@ -1260,7 +1260,7 @@ class GameManager: ObservableObject {
             ready = await Task.detached { ExternalLibrary.shared.probe(locationID, path: path) }.value
         }
         if !ready {
-            launchBlockedMessage = "\"\(game.cardName.name)\" is stored on a drive or folder EspressU can't reach right now. Connect the drive, then try again."
+            launchBlockedMessage = "\"\(game.cardName.name)\" is stored on a drive or folder WiiPad can't reach right now. Connect the drive, then try again."
         }
         return ready
     }

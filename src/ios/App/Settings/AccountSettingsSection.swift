@@ -28,12 +28,12 @@ struct AccountSettingsSection: View {
             InfoButton.footer(
                 note,
                 title: "Online play",
-                text: OnlineReadiness.howToFix + "\n\nImport from Wii U accepts account.dat, its 800000XX folder, otp.bin and seeprom.bin. EspressU can't create a linked account itself.")
+                text: OnlineReadiness.howToFix + "\n\nImport from Wii U accepts account.dat, its 800000XX folder, otp.bin and seeprom.bin. WiiPad can't create a linked account itself.")
         } else if let activeAccount, !activeAccount.isValidOnline {
             InfoButton.footer(
                 "This account has no cached NNID/PNID login, so it can't play online yet.",
                 title: "Account",
-                text: "Online play needs an account with a saved NNID or PNID login. Sign in on a real console and copy its account.dat here; EspressU can't create one.")
+                text: "Online play needs an account with a saved NNID or PNID login. Sign in on a real console and copy its account.dat here; WiiPad can't create one.")
         }
     }
 

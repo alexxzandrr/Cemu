@@ -30,18 +30,18 @@ struct DeviceReportSection: View {
             Button {
                 SessionReport.share()
             } label: {
-                Label("Share EspressU report", systemImage: "square.and.arrow.up")
+                Label("Share WiiPad report", systemImage: "square.and.arrow.up")
             }
 
             Button(role: .destructive) {
                 cemu_bridge_report_clear()
             } label: {
-                Label("Delete EspressU report", systemImage: "trash")
+                Label("Delete WiiPad report", systemImage: "trash")
             }
         } header: {
             SettingsSectionHeader("This Device", icon: "iphone", accent: .system)
         } footer: {
-            InfoButton.footer("For any bug, crash or speed comparison, share the EspressU report: device, settings, the whole log, crashes and a performance summary per game. Every session goes into the same file until you delete it here.")
+            InfoButton.footer("For any bug, crash or speed comparison, share the WiiPad report: device, settings, the whole log, crashes and a performance summary per game. Every session goes into the same file until you delete it here.")
         }
         .foregroundColor(EspressUTheme.brownDarkest)
     }

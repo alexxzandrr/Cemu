@@ -9,7 +9,7 @@
 import Foundation
 
 enum SettingsBackup {
-    static let formatName = "EspressU settings"
+    static let formatName = "WiiPad settings"
     static let currentVersion = 1
     private static let maxFileBytes = 2_000_000
 
@@ -24,11 +24,11 @@ enum SettingsBackup {
             case .unreadable:
                 return "That file couldn't be read."
             case .notASettingsFile:
-                return "That isn't an EspressU settings file."
+                return "That isn't an WiiPad settings file."
             case .newerVersion(let version):
-                return "That file is from a newer EspressU (settings file version \(version)). Update the app, then try again."
+                return "That file is from a newer WiiPad (settings file version \(version)). Update the app, then try again."
             case .nothingToImport:
-                return "That file has no settings EspressU can use."
+                return "That file has no settings WiiPad can use."
             }
         }
     }
@@ -79,7 +79,7 @@ enum SettingsBackup {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("settings-export-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let url = directory.appendingPathComponent("EspressU settings \(formatter.string(from: Date())).json")
+        let url = directory.appendingPathComponent("WiiPad settings \(formatter.string(from: Date())).json")
         try exportData().write(to: url, options: .atomic)
         return url
     }
@@ -93,7 +93,7 @@ enum SettingsBackup {
 
     static func preview(of data: Data) throws -> Preview {
         guard let root = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
-              [formatName, "EspressU settings", "EspressU settings"].contains(root["format"] as? String ?? "") else { throw BackupError.notASettingsFile }
+              [formatName, "WiiPad settings", "WiiPad settings"].contains(root["format"] as? String ?? "") else { throw BackupError.notASettingsFile }
         guard let version = (root["version"] as? NSNumber)?.intValue else { throw BackupError.notASettingsFile }
         guard version <= currentVersion else { throw BackupError.newerVersion(version) }
 

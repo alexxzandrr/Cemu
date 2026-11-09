@@ -790,7 +790,7 @@ struct EspressUHomeScreen<Lead: View, GameMenu: View>: View {
                     return ("heart", "No favourites yet", "Long-press a game and choose Favourite to see it here.")
                 }
                 return ("square.grid.2x2", "No games yet",
-                        "Tap Add to import a game, or put game files in Files \u{203A} On My \(UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone") \u{203A} EspressU \u{203A} Roms.")
+                        "Tap Add to import a game, or put game files in Files \u{203A} On My \(UIDevice.current.userInterfaceIdiom == .pad ? "iPad" : "iPhone") \u{203A} WiiPad \u{203A} Roms.")
             }()
             VStack(spacing: 14) {
                 Image(systemName: symbol)
@@ -1211,7 +1211,7 @@ struct EspressUHomeScreen<Lead: View, GameMenu: View>: View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(alignment: .center) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Add to EspressU")
+                    Text("Add to WiiPad")
                         .font(.title3.weight(.semibold))
                         .foregroundColor(EspressUTheme.brownDarkest)
                     Text("Games, updates, DLC and keys")
@@ -1251,7 +1251,7 @@ struct EspressUHomeScreen<Lead: View, GameMenu: View>: View {
                             }
                             .espressUSurface(RoundedRectangle(cornerRadius: 20, style: .continuous))
                             if group.0 == "Updates, DLC and keys" {
-                                Text("You can also drop updates and DLC into Files \u{203A} EspressU \u{203A} Updates & DLC.")
+                                Text("You can also drop updates and DLC into Files \u{203A} WiiPad \u{203A} Updates & DLC.")
                                     .font(.caption.weight(.medium))
                                     .foregroundColor(EspressUTheme.brownMid)
                                     .padding(.horizontal, 6)

@@ -382,7 +382,7 @@ struct GameOptionsView: View {
             InfoButton.footer(
                 "The save the game itself writes. Export is available once the game has saved.",
                 title: "Game saves",
-                text: "This is the save the game itself writes. It uses the Wii U\'s own format, so it can move between EspressU, desktop Cemu and a real console.\n\nExport writes a folder named after the game and title ID. Import accepts that folder, a folder named after the title ID from another Cemu install, or its \'user\' folder. Importing replaces the current save; the old one is first copied to save-backups in EspressU\'s Documents folder."
+                text: "This is the save the game itself writes. It uses the Wii U\'s own format, so it can move between WiiPad, desktop Cemu and a real console.\n\nExport writes a folder named after the game and title ID. Import accepts that folder, a folder named after the title ID from another Cemu install, or its \'user\' folder. Importing replaces the current save; the old one is first copied to save-backups in WiiPad\'s Documents folder."
             )
         }
     }
@@ -472,9 +472,9 @@ struct GameOptionsView: View {
             SettingsSectionHeader("Shader caches", icon: "hammer", accent: .core)
         } footer: {
             InfoButton.footer(
-                "Add a shader cache from desktop Cemu or another EspressU, so this game starts with its shaders already learned.",
+                "Add a shader cache from desktop Cemu or another WiiPad, so this game starts with its shaders already learned.",
                 title: "Shader caches",
-                text: "Learned shaders are what a game has revealed by drawing with them. Importing adds them to this game's own file: anything the game already has stays as it is, and the file is never replaced.\n\nThe file has to be this game's: EspressU checks the version stamp inside it, not the name. Desktop Cemu's files work: learned shaders are named like 000500001010ec00_shaders.bin and are converted the first time the game starts. EspressU's are named ..._mtlshaders.bin. Desktop caches from before Cemu 1.16 use another format and can't be converted.\n\nPipeline caches have to be EspressU's own, named ..._mtlpipeline.bin; the ..._vkpipeline.bin files from desktop Cemu can't be used. A pipeline cache also needs the game's learned shaders. Import with the game closed. The sizes in Settings update the next time you open it."
+                text: "Learned shaders are what a game has revealed by drawing with them. Importing adds them to this game's own file: anything the game already has stays as it is, and the file is never replaced.\n\nThe file has to be this game's: WiiPad checks the version stamp inside it, not the name. Desktop Cemu's files work: learned shaders are named like 000500001010ec00_shaders.bin and are converted the first time the game starts. WiiPad's are named ..._mtlshaders.bin. Desktop caches from before Cemu 1.16 use another format and can't be converted.\n\nPipeline caches have to be WiiPad's own, named ..._mtlpipeline.bin; the ..._vkpipeline.bin files from desktop Cemu can't be used. A pipeline cache also needs the game's learned shaders. Import with the game closed. The sizes in Settings update the next time you open it."
             )
         }
     }

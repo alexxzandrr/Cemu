@@ -15,13 +15,9 @@ struct AboutSettingsSection: View {
     var body: some View {
         Section {
             SettingsRow(label: "Version", value: Bundle.main.appVersionString, icon: "number")
-            SettingsRow(label: "Created by", value: "Amar", icon: "person.fill")
-            Link(destination: URL(string: "https://github.com/EspressU/EspressU-Emu")!) {
-                Label("View on GitHub", systemImage: "arrow.up.right.square")
-                    .font(.subheadline.weight(.semibold))
-            }
-            Link(destination: URL(string: "https://discord.gg/espressu")!) {
-                Label("Join the Discord", systemImage: "bubble.left.and.bubble.right")
+            SettingsRow(label: "WiiPad by", value: "alexxzandrr", icon: "person.fill")
+            Link(destination: URL(string: "https://github.com/alexxzandrr/Cemu/tree/duo")!) {
+                Label("WiiPad source code (GitHub)", systemImage: "arrow.up.right.square")
                     .font(.subheadline.weight(.semibold))
             }
             NavigationLink {
@@ -31,9 +27,16 @@ struct AboutSettingsSection: View {
                     .font(.subheadline.weight(.semibold))
             }
 
-            Text("EspressU is built on Cemu and based on [MuffinEMU](https://github.com/MuffinEMU/Muffin-EMU) by Void.")
-                .font(.system(size: 12))
-                .foregroundColor(EspressUTheme.secondaryText)
+            // Credits required by the EspressU Licence and the Crema Licence (LICENSES/EspressU-Licence.txt,
+            // src/ios/App/Crema/LICENSE.txt): shown next to the link to WiiPad's public source repository.
+            VStack(alignment: .leading, spacing: 4) {
+                Text("This product includes work by EspressU (https://espressu.dev).")
+                Text("EspressU (https://espressu.dev)")
+                Text("Crema touch controls by EspressU (https://espressu.dev)")
+                Text("WiiPad is an unofficial, non-commercial fork for iPhone Duo. It is built on Cemu and EspressU, which is based on [MuffinEMU](https://github.com/MuffinEMU/Muffin-EMU) by Void. EspressU does not endorse WiiPad. Wii U is a trademark of Nintendo; WiiPad is not affiliated with Nintendo.")
+            }
+            .font(.system(size: 12))
+            .foregroundColor(EspressUTheme.secondaryText)
 
             SettingsOnboardingRow(onRequestReopen: {
                 NotificationCenter.default.post(name: .espressuReopenOnboarding, object: nil)

@@ -97,7 +97,7 @@ enum AccountImport {
                                             label: name) {
                     result.accounts.append(c)
                 } else {
-                    result.problems.append("\(name) isn't a Wii U account.dat, otp.bin or seeprom.bin. If it is an account.dat, pick its 800000XX folder instead so EspressU can read the account ID.")
+                    result.problems.append("\(name) isn't a Wii U account.dat, otp.bin or seeprom.bin. If it is an account.dat, pick its 800000XX folder instead so WiiPad can read the account ID.")
                 }
             }
         }

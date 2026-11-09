@@ -5,6 +5,7 @@
 // in every copy, and credit "Crema touch controls by EspressU (https://espressu.dev)" in
 // its source, About screen, README, website, store page, release notes and ads.
 // Full text: LICENSE.txt in the Crema folder. Not covered by MPL-2.0.
+// Changed by WiiPad (2026): app name in user-facing text.
 
 import SwiftUI
 
@@ -24,7 +25,7 @@ struct CremaLayoutPanel: View {
     var body: some View {
         LayoutPanelCard(rows: { rows }, footer: {
             LayoutPanelFooter(
-                resetMessage: "Size, opacity, spacing, shoulder height, single moved or resized controls, haptics, controller hiding and deadzone go back to how EspressU ships, in every game.",
+                resetMessage: "Size, opacity, spacing, shoulder height, single moved or resized controls, haptics, controller hiding and deadzone go back to how WiiPad ships, in every game.",
                 onReset: reset,
                 onDone: onDone)
         })

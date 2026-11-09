@@ -166,8 +166,8 @@ struct DecryptROMView: View {
                                     .font(.footnote)
                                     .foregroundColor(EspressUTheme.brownMid)
                                 Text(chosenFormat.toWua
-                                    ? "Saved to Files \u{2192} On My iPad/iPhone \u{2192} EspressU \u{2192} Decrypted \u{2192} \(game.id).wua"
-                                    : "Saved to Files \u{2192} On My iPad/iPhone \u{2192} EspressU \u{2192} Decrypted \u{2192} \(game.title)")
+                                    ? "Saved to Files \u{2192} On My iPad/iPhone \u{2192} WiiPad \u{2192} Decrypted \u{2192} \(game.id).wua"
+                                    : "Saved to Files \u{2192} On My iPad/iPhone \u{2192} WiiPad \u{2192} Decrypted \u{2192} \(game.title)")
                                     .font(.caption)
                                     .foregroundColor(EspressUTheme.brownMid)
                                     .multilineTextAlignment(.center)
@@ -276,8 +276,8 @@ struct DecryptROMView: View {
         case 2: return "No matching key in keys.txt for this disc. Import the right key and try again."
         case 3: return "Couldn't write the decrypted output."
         case 4: return "Cancelled."
-        case 6: return "This game folder is missing a readable title.tmd or title.tik, which EspressU needs to decrypt it."
-        case 7: return "EspressU couldn't decrypt this game folder. Its title.tik doesn't unlock the .app files - check that title.tmd, title.tik and the .app files are from the same download."
+        case 6: return "This game folder is missing a readable title.tmd or title.tik, which WiiPad needs to decrypt it."
+        case 7: return "WiiPad couldn't decrypt this game folder. Its title.tik doesn't unlock the .app files - check that title.tmd, title.tik and the .app files are from the same download."
         case 8: return "This game folder is missing one or more .app files listed in its title.tmd."
         case 5: return "Some files couldn't be copied, so the decrypted copy is incomplete. Your original wasn't changed. Free up some space and try again."
         default: return "Decryption couldn't start."

@@ -2,6 +2,7 @@
 // Anything that contains or is derived from this file must be fully open source, keep this file
 // under the EspressU Licence, keep this notice in every copy, and credit EspressU (https://espressu.dev).
 // Full text: LICENSES/EspressU-Licence.txt. Not covered by MPL-2.0.
+// Changed by WiiPad (2026): app name in user-facing text.
 
 import SwiftUI
 import UIKit
@@ -149,7 +150,7 @@ struct EspressUGamePacksView: View {
         if game.titleId == nil {
             groups.append(SettingsGroup(id: "gp.noid", title: "", items: [
                 SettingsItem(id: "gp.noidNote", title: "Title ID unknown",
-                             detail: "EspressU couldn't read this game's title ID, so it can't pick out its packs.", control: .info("", nil)),
+                             detail: "WiiPad couldn't read this game's title ID, so it can't pick out its packs.", control: .info("", nil)),
             ]))
         } else {
             let own = store.packs.filter { !$0.universal && $0.appliesTo(titleId: game.titleId) }

@@ -280,9 +280,9 @@ struct CommunityServersSection: View {
             SettingsSectionHeader("Community servers", icon: "person.2", accent: .content)
         } footer: {
             InfoButton.footer(
-                "Projects run by other people. EspressU doesn't run or check them.",
+                "Projects run by other people. WiiPad doesn't run or check them.",
                 title: "Community servers",
-                text: "These are independent projects, listed for information. EspressU doesn't host them, and there's no server address built in for them: import the network_services.xml their host gives you.\n\nPretendo Network is built in under Network Service, but it needs a Wii U's account and console files.")
+                text: "These are independent projects, listed for information. WiiPad doesn't host them, and there's no server address built in for them: import the network_services.xml their host gives you.\n\nPretendo Network is built in under Network Service, but it needs a Wii U's account and console files.")
         }
         .foregroundColor(EspressUTheme.brownDarkest)
     }

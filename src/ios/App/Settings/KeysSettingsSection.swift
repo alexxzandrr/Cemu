@@ -35,7 +35,7 @@ struct KeysSettingsSection: View {
             InfoButton.footer(
                 "Only needed for encrypted games. Homebrew and already-decrypted dumps don't need keys.",
                 title: "Wii U Keys",
-                text: "Encrypted games (.wux, .wud, .iso, .wua) need AES keys dumped from your own Wii U, in a text file called keys.txt with one key per line. EspressU doesn't include keys.\n\nYou can also open EspressU in the Files app and drop keys.txt into the \"keys\" folder.\n\nNew keys are used the next time you start a game. If you've already started a game since opening EspressU, quit and reopen EspressU first.")
+                text: "Encrypted games (.wux, .wud, .iso, .wua) need AES keys dumped from your own Wii U, in a text file called keys.txt with one key per line. WiiPad doesn't include keys.\n\nYou can also open WiiPad in the Files app and drop keys.txt into the \"keys\" folder.\n\nNew keys are used the next time you start a game. If you've already started a game since opening WiiPad, quit and reopen WiiPad first.")
         }
         .foregroundColor(EspressUTheme.brownDarkest)
         .fileImporter(

@@ -25,7 +25,7 @@ final class DevicePairing: NSObject, ObservableObject {
         }
     }
 
-    static let hostName = "EspressU"
+    static let hostName = "WiiPad"
 
     /// The built-in pairing (EspressU showing up in Developer Mode settings) needs this iOS version or newer.
     static let minimumIOSVersion = 27
@@ -70,7 +70,7 @@ final class DevicePairing: NSObject, ObservableObject {
                 guard let self, self.host.map(ObjectIdentifier.init) == hostID else { return }
                 self.state = .pin(pin)
                 self.log("device asked for the PIN")
-                Self.notify(title: "EspressU pairing", body: "Enter this PIN in Settings: \(pin)")
+                Self.notify(title: "WiiPad pairing", body: "Enter this PIN in Settings: \(pin)")
             }
         }, completion: { [weak self] file, deviceName, failure, cancelled in
             Task { @MainActor [weak self] in
@@ -95,11 +95,11 @@ final class DevicePairing: NSObject, ObservableObject {
         host = nil
         if let file {
             do {
-                try StikJITSetup.savePairingFile(file, name: "Paired in EspressU")
+                try StikJITSetup.savePairingFile(file, name: "Paired in WiiPad")
                 StikJITCoordinator.shared.pairingFileChanged()
                 state = .paired(deviceName)
                 log("paired")
-                Self.notify(title: "EspressU is paired", body: "Go back to EspressU. JIT can start now.")
+                Self.notify(title: "WiiPad is paired", body: "Go back to WiiPad. JIT can start now.")
             } catch {
                 state = .failed("Paired, but the pairing file couldn't be saved: \(error.localizedDescription)")
             }
@@ -110,7 +110,7 @@ final class DevicePairing: NSObject, ObservableObject {
             let text = failure ?? "Pairing failed."
             state = .failed(text)
             log("failed: \(text)")
-            Self.notify(title: "EspressU pairing failed", body: "Go back to EspressU to try again.")
+            Self.notify(title: "WiiPad pairing failed", body: "Go back to WiiPad to try again.")
         }
     }
 
@@ -140,7 +140,7 @@ extension DevicePairing: NetServiceDelegate {
             guard self.service === sender, self.isActive else { return }
             self.host?.cancel()
             self.stopAdvertising()
-            self.state = .failed("EspressU couldn't show itself to Settings (error \(code)). Check that Local Network is on for EspressU in Settings › Privacy & Security › Local Network, then try again.")
+            self.state = .failed("WiiPad couldn't show itself to Settings (error \(code)). Check that Local Network is on for WiiPad in Settings › Privacy & Security › Local Network, then try again.")
         }
     }
 }

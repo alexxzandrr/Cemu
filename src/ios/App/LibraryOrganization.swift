@@ -747,7 +747,7 @@ struct LibraryExternalLine: View {
                 .lineLimit(2)
                 .multilineTextAlignment(centered ? .center : .leading)
                 .frame(maxWidth: centered ? .infinity : nil, alignment: centered ? .center : .leading)
-                .accessibilityLabel(game.isUnavailable ? ExternalLibrary.unavailableMessage : "Stored outside EspressU, played in place")
+                .accessibilityLabel(game.isUnavailable ? ExternalLibrary.unavailableMessage : "Stored outside WiiPad, played in place")
         }
     }
 }

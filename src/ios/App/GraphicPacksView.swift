@@ -69,7 +69,7 @@ struct GraphicPacksView: View {
     @ViewBuilder private func gameSections(_ game: GameMetadata) -> some View {
         if game.titleId == nil {
             Section {
-                ScreenStatusCallout(tone: .info, message: "EspressU couldn't read this game's title ID, so it can't pick out its packs. Browse all packs instead.")
+                ScreenStatusCallout(tone: .info, message: "WiiPad couldn't read this game's title ID, so it can't pick out its packs. Browse all packs instead.")
             }
             .listRowBackground(Color.clear)
         } else if gamePacks.isEmpty && universalPacks.isEmpty {
@@ -160,7 +160,7 @@ struct GraphicPacksView: View {
             InfoButton.footer(
                 "A folder with a rules.txt, a folder of packs, or a zip of either.",
                 title: "Import packs",
-                text: "Pick a pack folder, a folder that holds several packs, or a zip of either. EspressU checks that it really contains a pack (a rules.txt) before adding it.\n\nImported packs are kept apart from the community download, so updating the community packs never removes them. Importing the same folder name again replaces the earlier copy. To remove an imported pack, open it and choose Remove.\n\nYou can also drop pack folders into graphicPacks inside EspressU's Documents folder in Files."
+                text: "Pick a pack folder, a folder that holds several packs, or a zip of either. WiiPad checks that it really contains a pack (a rules.txt) before adding it.\n\nImported packs are kept apart from the community download, so updating the community packs never removes them. Importing the same folder name again replaces the earlier copy. To remove an imported pack, open it and choose Remove.\n\nYou can also drop pack folders into graphicPacks inside WiiPad's Documents folder in Files."
             )
         }
         .foregroundColor(EspressUTheme.brownDarkest)
@@ -179,7 +179,7 @@ struct GraphicPacksView: View {
             InfoButton.footer(
                 "The community packs are made by the Cemu graphic packs project and its contributors.",
                 title: "Where packs come from",
-                text: "The downloadable packs are the Cemu graphic packs project's community collection (github.com/cemu-project/cemu_graphic_packs), made and maintained by its many contributors and released under the CC0 1.0 public domain dedication. EspressU downloads them straight from that project's releases and doesn't change them.\n\nPacks that replace shaders are written for OpenGL and Vulkan. The Metal renderer can't use those shaders, so such packs are marked. Packs made only of settings, presets and patches work with Metal."
+                text: "The downloadable packs are the Cemu graphic packs project's community collection (github.com/cemu-project/cemu_graphic_packs), made and maintained by its many contributors and released under the CC0 1.0 public domain dedication. WiiPad downloads them straight from that project's releases and doesn't change them.\n\nPacks that replace shaders are written for OpenGL and Vulkan. The Metal renderer can't use those shaders, so such packs are marked. Packs made only of settings, presets and patches work with Metal."
             )
         }
         .foregroundColor(EspressUTheme.brownDarkest)
@@ -213,7 +213,7 @@ struct GraphicPackSourceSection: View {
             InfoButton.footer(
                 footerText,
                 title: "Community packs",
-                text: "The community packs are downloaded from the Cemu graphic packs project's latest release on GitHub. The download is verified (size and a checksum on every file) before it replaces anything, and it needs free space for the zip and the extracted copy. If it fails or is cancelled, the packs you already have stay as they were.\n\nEspressU checks for a newer release when you open this screen, at most once a day, or when you tap Check for updates. Pack choices (which packs are on and their options) are kept across updates.\n\nThe download keeps going if you leave the app."
+                text: "The community packs are downloaded from the Cemu graphic packs project's latest release on GitHub. The download is verified (size and a checksum on every file) before it replaces anything, and it needs free space for the zip and the extracted copy. If it fails or is cancelled, the packs you already have stay as they were.\n\nWiiPad checks for a newer release when you open this screen, at most once a day, or when you tap Check for updates. Pack choices (which packs are on and their options) are kept across updates.\n\nThe download keeps going if you leave the app."
             )
         }
         .foregroundColor(EspressUTheme.brownDarkest)
@@ -692,7 +692,7 @@ struct GraphicPackDetailView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("Its folder is deleted from EspressU's graphicPacks/imported folder.")
+                Text("Its folder is deleted from WiiPad's graphicPacks/imported folder.")
             }
         } else {
             ScreenEmptyState(systemImage: "questionmark.folder", headline: "Pack not found",

@@ -45,7 +45,7 @@ enum ShaderCacheImport {
     static func run(kind: Kind, game: GameMetadata, library: [GameMetadata], staged: URL, originalName: String) -> Outcome {
         defer { try? FileManager.default.removeItem(at: staged) }
         if kind == .pipeline && isForeignPipeline(fileName: originalName) {
-            return Outcome(message: "\"\(originalName)\" is a pipeline cache from desktop Cemu. EspressU can't use those, only ones named ..._mtlpipeline.bin. Learned shaders from desktop Cemu can still be imported.", failed: true)
+            return Outcome(message: "\"\(originalName)\" is a pipeline cache from desktop Cemu. WiiPad can't use those, only ones named ..._mtlpipeline.bin. Learned shaders from desktop Cemu can still be imported.", failed: true)
         }
         guard let titleId = titleId(for: game) else {
             return Outcome(message: "Couldn't read this game's title ID, so there's no cache to put the file in.", failed: true)
@@ -60,11 +60,11 @@ enum ShaderCacheImport {
 
         switch Int(info.status) {
         case Int(CEMU_CACHE_STATUS_NOT_A_CACHE.rawValue):
-            return Outcome(message: "\"\(originalName)\" isn't a shader cache file, or it's damaged. Pick a .bin file from a Cemu or EspressU shaderCache folder.", failed: true)
+            return Outcome(message: "\"\(originalName)\" isn't a shader cache file, or it's damaged. Pick a .bin file from a Cemu or WiiPad shaderCache folder.", failed: true)
         case Int(CEMU_CACHE_STATUS_OTHER_GAME.rawValue):
             return Outcome(message: otherGameMessage(stamp: info.stamp, originalName: originalName, gameName: gameName, library: library), failed: true)
         case Int(CEMU_CACHE_STATUS_OLD_FORMAT.rawValue):
-            return Outcome(message: "\"\(originalName)\" is a learned-shader cache from a desktop Cemu older than 1.16, which keyed shaders differently. It can't be converted. Use a cache from Cemu 1.16 or newer, or from EspressU.", failed: true)
+            return Outcome(message: "\"\(originalName)\" is a learned-shader cache from a desktop Cemu older than 1.16, which keyed shaders differently. It can't be converted. Use a cache from Cemu 1.16 or newer, or from WiiPad.", failed: true)
         case Int(CEMU_CACHE_STATUS_NOTHING_USABLE.rawValue):
             return Outcome(message: "\"\(originalName)\" is a cache for \(gameName), but none of its \(info.entryCount) entries can be used.", failed: true)
         default:

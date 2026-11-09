@@ -200,7 +200,7 @@ struct MenuMusicSettingsGroup: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("Theme music")
                     .font(.system(size: 15, weight: .semibold))
-                Text("Plays EspressU's themes, or your own tracks, on loop in the menus, never in a game.")
+                Text("Plays WiiPad's themes, or your own tracks, on loop in the menus, never in a game.")
                     .font(.system(size: 12))
                     .foregroundColor(.secondary)
                     .fixedSize(horizontal: false, vertical: true)

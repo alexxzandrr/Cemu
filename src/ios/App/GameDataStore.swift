@@ -314,7 +314,7 @@ final class GameDataStore: ObservableObject {
         let fm = FileManager.default
         report("Downloading GameTDB database", 0.02)
         var request = URLRequest(url: Self.databaseURL)
-        request.setValue("EspressU", forHTTPHeaderField: "User-Agent")
+        request.setValue("WiiPad", forHTTPHeaderField: "User-Agent")
         request.timeoutInterval = 60
         let (tmp, response) = try await URLSession.shared.download(for: request)
         defer { try? fm.removeItem(at: tmp) }
