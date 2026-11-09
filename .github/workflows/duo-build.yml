@@ -62,8 +62,25 @@ jobs:
           mkdir -p "$VCPKG_DEFAULT_BINARY_CACHE"
           ci/build-stikjit.sh
 
-      - name: Bootstrap vcpkg
-        run: ./dependencies/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+      - name: vcpkg version
+        id: vcpkgsha
+        run: echo "sha=$(git -C dependencies/vcpkg rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache vcpkg tool
+        id: vcpkgtool
+        uses: actions/cache@v4
+        with:
+          path: dependencies/vcpkg/vcpkg
+          key: vcpkg-tool-macos-${{ steps.vcpkgsha.outputs.sha }}
+
+      - name: Bootstrap vcpkg (retries on download errors)
+        if: steps.vcpkgtool.outputs.cache-hit != 'true'
+        run: |
+          for i in 1 2 3 4 5; do
+            ./dependencies/vcpkg/bootstrap-vcpkg.sh -disableMetrics && exit 0
+            echo "bootstrap attempt $i failed, retrying in $((i * 30))s"; sleep $((i * 30))
+          done
+          exit 1
 
       - name: Configure Cemu core
         run: |
